@@ -352,9 +352,9 @@ import nme.display.OpenGLView;
 		
 		this._activeTexturesCache = new Vector<BaseTexture>(this._maxTextureChannels);
 		
-		var msg:String = "BabylonHx - Cross-Platform 3D Engine | " + Date.now().getFullYear() + " | www.babylonhx.com";
+		/*var msg:String = "BabylonHx - Cross-Platform 3D Engine | " + Date.now().getFullYear() + " | www.babylonhx.com";
 		msg +=  " | GL version: " + this._glVersion + " | GL vendor: " + this._glVendor + " | GL renderer: " + this._glVendor; 
-		trace(msg);
+		trace(msg);*/
 	}
 	
 	public function getExtensions():Array<String> {
