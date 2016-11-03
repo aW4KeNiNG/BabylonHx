@@ -15,22 +15,40 @@ import com.babylonhx.tools.Tools;
 
 @:expose('BABYLON.RenderingManager') class RenderingManager {
 	
+	/**
+     * The max id used for rendering groups (not included)
+     */
 	public static inline var MAX_RENDERINGGROUPS:Int = 4;
+	
+	/**
+     * The min id used for rendering groups (included)
+     */
+    inline public static var MIN_RENDERINGGROUPS:Int = 0;
 
 	private var _scene:Scene;
 	private var _renderingGroups:Array<RenderingGroup> = [];
-	private var _depthBufferAlreadyCleaned:Bool;
+	private var _depthStencilBufferAlreadyCleaned:Bool;
 	
 	private var _currentIndex:Int;
     private var _currentActiveMeshes:Array<AbstractMesh>;
     private var _currentRenderParticles:Bool;
     private var _currentRenderSprites:Bool;
 	
+	private var _autoClearDepthStencil:Array<Bool> = [];
+	private var _customOpaqueSortCompareFn:Array<SubMesh->SubMesh->Int> = [];
+	private var _customAlphaTestSortCompareFn:Array<SubMesh->SubMesh->Int> = [];
+	private var _customTransparentSortCompareFn:Array<SubMesh->SubMesh->Int> = [];
+	private var _renderinGroupInfo:RenderingGroupInfo = null;
+	
 	private var _activeCamera:Camera;
 	
 
 	public function new(scene:Scene) {
 		this._scene = scene;
+		
+		for (i in RenderingManager.MIN_RENDERINGGROUPS...RenderingManager.MAX_RENDERINGGROUPS) {
+			this._autoClearDepthStencil[i] = true;
+		}
 	}
 
 	private function _renderParticles(index:Int, activeMeshes:Array<AbstractMesh>) {
@@ -52,7 +70,7 @@ import com.babylonhx.tools.Tools;
                 continue;
             }
 			
-			this._clearDepthBuffer();
+			this._clearDepthStencilBuffer();
 			
 			if (particleSystem.emitter.position == null || activeMeshes == null || activeMeshes.indexOf(particleSystem.emitter) != -1) {
 				this._scene._activeParticles += particleSystem.render();
@@ -73,20 +91,20 @@ import com.babylonhx.tools.Tools;
 			var spriteManager = this._scene.spriteManagers[id];
 			
 			if (spriteManager.renderingGroupId == index && ((_activeCamera.layerMask & spriteManager.layerMask) != 0)) {
-				this._clearDepthBuffer();
+				this._clearDepthStencilBuffer();
 				spriteManager.render();
 			}
 		}
 		//this._scene._spritesDuration += Tools.Now() - beforeSpritessDate;
 	}
 
-	inline private function _clearDepthBuffer() {
-		if (this._depthBufferAlreadyCleaned) {
+	inline private function _clearDepthStencilBuffer() {
+		if (this._depthStencilBufferAlreadyCleaned) {
 			return;
 		}
 		
-		this._scene.getEngine().clear(0, false, true);
-		this._depthBufferAlreadyCleaned = true;		
+		this._scene.getEngine().clear(0, false, true, true);
+		this._depthStencilBufferAlreadyCleaned = true;		
 	}
 	
 	private function _renderSpritesAndParticles() {
@@ -99,40 +117,90 @@ import com.babylonhx.tools.Tools;
 		}
 	}
 
-	static var _renderingGroup:RenderingGroup;
-	static var _needToStepBack:Bool;
 	public function render(customRenderFunction:SmartArray<SubMesh>->SmartArray<SubMesh>->SmartArray<SubMesh>->Void = null, activeMeshes:Array<AbstractMesh>, renderParticles:Bool, renderSprites:Bool) {
-		this._currentActiveMeshes = activeMeshes;
-        this._currentRenderParticles = renderParticles;
-        this._currentRenderSprites = renderSprites;
+		// Check if there's at least on observer on the onRenderingGroupObservable and initialize things to fire it
+		var observable = this._scene.onRenderingGroupObservable.hasObservers() ? this._scene.onRenderingGroupObservable : null;
+		var info:RenderingGroupInfo = null;
+		if (observable != null) {
+			if (this._renderinGroupInfo == null) {
+				this._renderinGroupInfo = new RenderingGroupInfo();
+			}
+			info = this._renderinGroupInfo;
+			info.scene = this._scene;
+			info.camera = this._scene.activeCamera;
+		}
 		
-		var index:Int = 0;
-		while(index < RenderingManager.MAX_RENDERINGGROUPS) {
-			this._depthBufferAlreadyCleaned = index == 0;
-			_renderingGroup = this._renderingGroups[index];
-			_needToStepBack = false;
+		this._currentActiveMeshes = activeMeshes;
+		this._currentRenderParticles = renderParticles;
+		this._currentRenderSprites = renderSprites;
+		
+		var index = RenderingManager.MIN_RENDERINGGROUPS;
+		while (index < RenderingManager.MAX_RENDERINGGROUPS) {
+			this._depthStencilBufferAlreadyCleaned = index == RenderingManager.MIN_RENDERINGGROUPS;
+			var renderingGroup = this._renderingGroups[index];
+			var needToStepBack = false;
 			
 			this._currentIndex = index;
 			
-			if (_renderingGroup != null) {
-				this._clearDepthBuffer();
+			if (renderingGroup != null) {
+				var renderingGroupMask:Int = 0;
 				
-				if (_renderingGroup.onBeforeTransparentRendering == null) {
-                    _renderingGroup.onBeforeTransparentRendering = this._renderSpritesAndParticles;
-                }
+				// Fire PRECLEAR stage
+				if (observable != null) {
+					renderingGroupMask = cast Math.pow(2, index);
+					info.renderStage = RenderingGroupInfo.STAGE_PRECLEAR;
+					info.renderingGroupId = index;
+					observable.notifyObservers(info, renderingGroupMask);
+				}
 				
-				if (!_renderingGroup.render(customRenderFunction)) {
-
+				// Clear depth/stencil if needed
+				if (this._autoClearDepthStencil[index]) {
+					this._clearDepthStencilBuffer();
+				}
+				
+				// Fire PREOPAQUE stage
+				if (observable != null) {
+					info.renderStage = RenderingGroupInfo.STAGE_PREOPAQUE;
+					observable.notifyObservers(info, renderingGroupMask);
+				}
+				
+				if (renderingGroup.onBeforeTransparentRendering == null) {
+					renderingGroup.onBeforeTransparentRendering = this._renderSpritesAndParticles;
+				}
+				
+				// Fire PRETRANSPARENT stage
+				if (observable != null) {
+					info.renderStage = RenderingGroupInfo.STAGE_PRETRANSPARENT;
+					observable.notifyObservers(info, renderingGroupMask);
+				}
+				
+				if (!renderingGroup.render(customRenderFunction)) {
 					this._renderingGroups.splice(index, 1);
-					_needToStepBack = true;
+					needToStepBack = true;
 					this._renderSpritesAndParticles();
 				}
-			}
+				
+				// Fire POSTTRANSPARENT stage
+				if (observable != null) {
+					info.renderStage = RenderingGroupInfo.STAGE_POSTTRANSPARENT;
+					observable.notifyObservers(info, renderingGroupMask);
+				}
+			} 
 			else {
 				this._renderSpritesAndParticles();
+				
+				if (observable != null) {
+					var renderingGroupMask:Int = cast Math.pow(2, index);
+					info.renderStage = RenderingGroupInfo.STAGE_PRECLEAR;
+					info.renderingGroupId = index;
+					observable.notifyObservers(info, renderingGroupMask);
+					
+					info.renderStage = RenderingGroupInfo.STAGE_POSTTRANSPARENT;
+					observable.notifyObservers(info, renderingGroupMask);
+				}
 			}
 			
-			if (_needToStepBack) {
+			if (needToStepBack) {
 				index--;
 			}
 			
@@ -141,7 +209,8 @@ import com.babylonhx.tools.Tools;
 	}
 
 	public function reset() {
-		for (renderingGroup in this._renderingGroups) {
+		for (index in RenderingManager.MIN_RENDERINGGROUPS...RenderingManager.MAX_RENDERINGGROUPS) {
+			var renderingGroup = this._renderingGroups[index];
 			if(renderingGroup != null) {
 				renderingGroup.prepare();
 			}
@@ -153,10 +222,50 @@ import com.babylonhx.tools.Tools;
 		var renderingGroupId = mesh.renderingGroupId;
 		
 		if (this._renderingGroups[renderingGroupId] == null) {
-			this._renderingGroups[renderingGroupId] = new RenderingGroup(renderingGroupId, this._scene);
+			this._renderingGroups[renderingGroupId] = new RenderingGroup(renderingGroupId, this._scene,
+				this._customOpaqueSortCompareFn[renderingGroupId],
+                this._customAlphaTestSortCompareFn[renderingGroupId],
+                this._customTransparentSortCompareFn[renderingGroupId]
+			);
 		}
 		
 		this._renderingGroups[renderingGroupId].dispatch(subMesh);
+	}
+	
+	/**
+	 * Overrides the default sort function applied in the renderging group to prepare the meshes.
+	 * This allowed control for front to back rendering or reversly depending of the special needs.
+	 * 
+	 * @param renderingGroupId The rendering group id corresponding to its index
+	 * @param opaqueSortCompareFn The opaque queue comparison function use to sort.
+	 * @param alphaTestSortCompareFn The alpha test queue comparison function use to sort.
+	 * @param transparentSortCompareFn The transparent queue comparison function use to sort.
+	 */
+	public function setRenderingOrder(renderingGroupId:Int,
+		opaqueSortCompareFn:SubMesh->SubMesh->Int = null,
+		alphaTestSortCompareFn:SubMesh->SubMesh->Int = null,
+		transparentSortCompareFn:SubMesh->SubMesh->Int = null) {
+		
+		if (this._renderingGroups[renderingGroupId] != null) {
+			var group = this._renderingGroups[renderingGroupId];
+			group.opaqueSortCompareFn = this._customOpaqueSortCompareFn[renderingGroupId];
+			group.alphaTestSortCompareFn = this._customAlphaTestSortCompareFn[renderingGroupId];
+			group.transparentSortCompareFn = this._customTransparentSortCompareFn[renderingGroupId];
+		}
+		
+		this._customOpaqueSortCompareFn[renderingGroupId] = opaqueSortCompareFn;
+		this._customAlphaTestSortCompareFn[renderingGroupId] = alphaTestSortCompareFn;
+		this._customTransparentSortCompareFn[renderingGroupId] = transparentSortCompareFn;
+	}
+
+	/**
+	 * Specifies whether or not the stencil and depth buffer are cleared between two rendering groups.
+	 * 
+	 * @param renderingGroupId The rendering group id corresponding to its index
+	 * @param autoClearDepthStencil Automatically clears depth and stencil between groups if true.
+	 */
+	inline public function setRenderingAutoClearDepthStencil(renderingGroupId:Int, autoClearDepthStencil:Bool) {            
+		this._autoClearDepthStencil[renderingGroupId] = autoClearDepthStencil;
 	}
 
 }

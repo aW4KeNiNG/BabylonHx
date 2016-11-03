@@ -34,6 +34,7 @@ class NodeCache {
 	public var minZ:Null<Float>;
 	public var maxZ:Null<Float>;
 	public var fov:Null<Float>;
+	public var fovMode:Null<Int>;
 	public var aspectRatio:Null<Float>;
 	public var orthoLeft:Null<Float>;
 	public var orthoRight:Null<Float>;
@@ -76,6 +77,9 @@ class NodeCache {
 	
 	@serialize()
 	public var state:String = "";
+	
+	@serialize()
+    public var metadata:Dynamic = null;
 
 	public var animations:Array<Animation> = [];
 	private var _ranges:Map<String, AnimationRange> = new Map();
@@ -421,6 +425,18 @@ class NodeCache {
 	public function dispose(doNotRecurse:Bool = false) {
 		this.parent = null;
 	}
+	
+	public function getDirection(localAxis:Vector3):Vector3 {
+        var result = Vector3.Zero();
+		
+        this.getDirectionToRef(localAxis, result);
+        
+        return result;
+    }
+
+    inline public function getDirectionToRef(localAxis:Vector3, result:Vector3) {
+        Vector3.TransformNormalToRef(localAxis, this.getWorldMatrix(), result);
+    }
 	
 	public static function ParseAnimationRanges(node:Node, parsedNode:Dynamic, scene:Scene) {
 		if (parsedNode.ranges != null){

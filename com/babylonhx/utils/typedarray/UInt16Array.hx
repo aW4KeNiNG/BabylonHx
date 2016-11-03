@@ -6,17 +6,17 @@ package com.babylonhx.utils.typedarray;
 
 #if purejs
 
-	typedef UInt16Array = js.html.UInt16Array;
+	typedef UInt16Array = js.html.Uint16Array;
 
 #elseif snow
  
 	typedef UInt16Array = snow.api.buffers.Uint16Array;
 	
-#elseif openfl
-
-	typedef UInt16Array = openfl.utils.UInt16Array;
+//#elseif openfl
+//
+//	typedef UInt16Array = openfl.utils.UInt16Array;
 	
-#elseif lime
+#elseif (lime || openfl)
 
 	typedef UInt16Array = lime.utils.UInt16Array;	
 	

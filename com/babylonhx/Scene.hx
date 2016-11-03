@@ -14,6 +14,7 @@ import com.babylonhx.collisions.Collider;
 import com.babylonhx.collisions.PickingInfo;
 import com.babylonhx.culling.octrees.Octree;
 import com.babylonhx.layer.Layer;
+import com.babylonhx.layer.HighlightLayer;
 import com.babylonhx.lensflare.LensFlareSystem;
 import com.babylonhx.lights.HemisphericLight;
 import com.babylonhx.lights.Light;
@@ -57,6 +58,7 @@ import com.babylonhx.tools.Tools;
 import com.babylonhx.tools.Observable;
 import com.babylonhx.tools.Observer;
 import com.babylonhx.tools.EventState;
+import com.babylonhx.tools.StringDictionary;
 
 #if (purejs || js)
 import com.babylonhx.audio.*;
@@ -236,6 +238,14 @@ import com.babylonhx.audio.*;
 	*/
 	public var onMeshRemovedObservable:Observable<AbstractMesh> = new Observable<AbstractMesh>();
 	
+	/**
+	 * This Observable will be triggered for each stage of each renderingGroup of each rendered camera.
+	 * The RenderinGroupInfo class contains all the information about the context in which the observable is called
+	 * If you wish to register an Observer only for a given set of renderingGroup, use the mask with a combination 
+	 * of the renderingGroup index elevated to the power of two (1 for renderingGroup 0, 2 for renderingrOup1, 4 for 2 and 8 for 3)
+	 */
+	public var onRenderingGroupObservable:Observable<RenderingGroupInfo> = new Observable<RenderingGroupInfo>();
+	
 	// Animations
 	public var animations:Array<Animation> = [];
 
@@ -357,6 +367,7 @@ import com.babylonhx.audio.*;
 
 	// Layers
 	public var layers:Array<Layer> = [];
+	public var highlightLayers:Array<HighlightLayer> = [];
 
 	// Skeletons
 	public var skeletonsEnabled:Bool = true;
@@ -507,11 +518,17 @@ import com.babylonhx.audio.*;
 	private var _pickedDownMesh:AbstractMesh;
 	private var _pickedDownSprite:Sprite;
 	
+	private var _externalData:StringDictionary<Dynamic>;
+    private var _uid:String;
+	
 
 	public function new(engine:Engine) {
 		this._engine = engine;
 		
 		engine.scenes.push(this);
+		
+		this._externalData = new StringDictionary<Dynamic>();
+        this._uid = null;
 		
 		this._renderingManager = new RenderingManager(this);
 		
@@ -1239,11 +1256,11 @@ import com.babylonhx.audio.*;
 	 * @param target - the target 
 	 * @see beginAnimation 
 	 */
-	public function stopAnimation(target:Dynamic) {
+	public function stopAnimation(target:Dynamic, ?animationName:String) {
 		var animatable = this.getAnimatableByTarget(target);
 		
 		if (animatable != null) {
-			animatable.stop();
+			animatable.stop(animationName);
 		}
 	}
 	
@@ -1869,6 +1886,58 @@ import com.babylonhx.audio.*;
 	inline public function isActiveMesh(mesh:Mesh):Bool {
 		return (this._activeMeshes.indexOf(mesh) != -1);
 	}
+	
+	/**
+	 * Return a unique id as a string which can serve as an identifier for the scene
+	 */
+	public var uid(get, never):String;
+	private function get_uid():String {
+		if (this._uid == null) {
+			this._uid = Tools.uuid();
+		}
+		
+		return this._uid;
+	}
+
+	/**
+	 * Add an externaly attached data from its key.
+	 * This method call will fail and return false, if such key already exists.
+	 * If you don't care and just want to get the data no matter what, use the more convenient getOrAddExternalDataWithFactory() method.
+	 * @param key the unique key that identifies the data
+	 * @param data the data object to associate to the key for this Engine instance
+	 * @return true if no such key were already present and the data was added successfully, false otherwise
+	 */
+	inline public function addExternalData<T>(key:String, data:T):Bool {
+		return this._externalData.add(key, data);
+	}
+
+	/**
+	 * Get an externaly attached data from its key
+	 * @param key the unique key that identifies the data
+	 * @return the associated data, if present (can be null), or undefined if not present
+	 */
+	inline public function getExternalData<T>(key:String):T {
+		return this._externalData.get(key);
+	}
+
+	/**
+	 * Get an externaly attached data from its key, create it using a factory if it's not already present
+	 * @param key the unique key that identifies the data
+	 * @param factory the factory that will be called to create the instance if and only if it doesn't exists
+	 * @return the associated data, can be null if the factory returned null.
+	 */
+	inline public function getOrAddExternalDataWithFactory<T>(key:String, factory:String->T):T {
+		return this._externalData.getOrAddWithFactory(key, factory);
+	}
+
+	/**
+	 * Remove an externaly attached data from the Engine instance
+	 * @param key the unique key that identifies the data
+	 * @return true if the data was successfully removed, false if it doesn't exist
+	 */
+	inline public function removeExternalData(key:String):Bool {
+		return this._externalData.remove(key);
+	}
 
 	static var _eSMMaterial:Material;
 	inline private function _evaluateSubMesh(subMesh:SubMesh, mesh:AbstractMesh) {
@@ -2112,7 +2181,28 @@ import com.babylonhx.audio.*;
 		
 		// Render
 		//Tools.StartPerformanceCounter("Main render");
+		
+		// Activate HighlightLayer stencil
+		var stencilState = this._engine.getStencilBuffer();
+		var renderhighlights:Bool = false;
+		if (this.highlightLayers.length > 0) {
+			for (i in 0...this.highlightLayers.length) {
+				var highlightLayer = this.highlightLayers[i];
+                if ((highlightLayer.camera == null || camera == highlightLayer.camera) && highlightLayer.shouldRender()) {
+					renderhighlights = true;
+					this._engine.setStencilBuffer(true);
+					break;
+				}
+			}
+		}
+		
 		this._renderingManager.render(null, null, true, true);
+		
+		// Restore HighlightLayer stencil
+		if (renderhighlights) {
+			this._engine.setStencilBuffer(stencilState);
+		}
+		
 		//Tools.EndPerformanceCounter("Main render");
 		
 		// Bounding boxes
@@ -2142,6 +2232,17 @@ import com.babylonhx.audio.*;
 				var layer = this.layers[layerIndex];
 				if (!layer.isBackground) {
 					layer.render();
+				}
+			}
+			engine.setDepthBuffer(true);
+		}
+		
+		// Highlight Layer
+		if (renderhighlights) {
+			engine.setDepthBuffer(false);
+			for (i in 0...this.highlightLayers.length) {
+				if (this.highlightLayers[i].shouldRender()) {
+					this.highlightLayers[i].render();
 				}
 			}
 			engine.setDepthBuffer(true);
@@ -2317,7 +2418,7 @@ import com.babylonhx.audio.*;
 		}
 		
 		// Clear
-		this._engine.clear(this.clearColor, this.autoClear || this.forceWireframe || this.forcePointsCloud, true);
+		this._engine.clear(this.clearColor, this.autoClear || this.forceWireframe || this.forcePointsCloud, true, true);
 		
 		// Shadows
 		if (this.shadowsEnabled) {
@@ -2336,6 +2437,15 @@ import com.babylonhx.audio.*;
 			this._renderTargets.push(this._depthRenderer.getDepthMap());
 		}
 		
+		// HighlightLayer
+		if (this.highlightLayers.length > 0) {
+			for (i in 0...this.highlightLayers.length) {
+				if (this.highlightLayers[i].shouldRender()) {
+					this._renderTargets.push(this.highlightLayers[i]._mainTexture);
+				}
+			}
+		}
+		
 		// RenderPipeline
 		this.postProcessRenderPipelineManager.update();
 		
@@ -2345,7 +2455,7 @@ import com.babylonhx.audio.*;
 			for (cameraIndex in 0...this.activeCameras.length) {
 				this._renderId = currentRenderId;
 				if (cameraIndex > 0) {
-                    this._engine.clear(0, false, true);
+                    this._engine.clear(0, false, true, true);
                 }
 				
 				this._processSubCameras(this.activeCameras[cameraIndex]);
@@ -2483,6 +2593,9 @@ import com.babylonhx.audio.*;
 		// Release layers
 		while (this.layers.length > 0) {
 			this.layers[0].dispose();
+		}
+		while (this.highlightLayers.length > 0) {
+			this.highlightLayers[0].dispose();
 		}
 		
 		// Release textures
@@ -2903,5 +3016,35 @@ import com.babylonhx.audio.*;
 	public function getMaterialByTags(tagsQuery:String):Array<Material> {
 		return cast this._getByTags(this.materials, tagsQuery).concat(this._getByTags(this.multiMaterials, tagsQuery));
 	}*/
+	
+	/**
+	 * Overrides the default sort function applied in the renderging group to prepare the meshes.
+	 * This allowed control for front to back rendering or reversly depending of the special needs.
+	 * 
+	 * @param renderingGroupId The rendering group id corresponding to its index
+	 * @param opaqueSortCompareFn The opaque queue comparison function use to sort.
+	 * @param alphaTestSortCompareFn The alpha test queue comparison function use to sort.
+	 * @param transparentSortCompareFn The transparent queue comparison function use to sort.
+	 */
+	public function setRenderingOrder(renderingGroupId:Int,
+		opaqueSortCompareFn:SubMesh->SubMesh->Int = null,
+		alphaTestSortCompareFn:SubMesh->SubMesh->Int = null,
+		transparentSortCompareFn:SubMesh->SubMesh->Int = null) {
+		
+		this._renderingManager.setRenderingOrder(renderingGroupId,
+			opaqueSortCompareFn,
+			alphaTestSortCompareFn,
+			transparentSortCompareFn);
+	}
+
+	/**
+	 * Specifies whether or not the stencil and depth buffer are cleared between two rendering groups.
+	 * 
+	 * @param renderingGroupId The rendering group id corresponding to its index
+	 * @param autoClearDepthStencil Automatically clears depth and stencil between groups if true.
+	 */
+	inline public function setRenderingAutoClearDepthStencil(renderingGroupId:Int, autoClearDepthStencil:Bool) {            
+		this._renderingManager.setRenderingAutoClearDepthStencil(renderingGroupId, autoClearDepthStencil);
+	}
 	
 }

@@ -197,6 +197,10 @@ import com.babylonhx.utils.typedarray.Float32Array;
 	public var _physicsFriction:Float = 0;
 	public var _physicRestitution:Float = 0;
 	public var onPhysicsCollide:AbstractMesh->Dynamic->Void; 
+	
+	// exposing physics...
+	public var rigidBody:Dynamic;
+	public var physicsDim:Dynamic;
 
 	// Collisions
 	private var _checkCollisions:Bool = false;
@@ -465,7 +469,7 @@ import com.babylonhx.utils.typedarray.Float32Array;
     }
 
 	static var _rotationAxisCache:Quaternion = new Quaternion();
-	public function rotate(axis:Vector3, amount:Float, space:Space) {
+	public function rotate(axis:Vector3, amount:Float, ?space:Space) {
 		axis.normalize(); 
 		
 		if (this.rotationQuaternion == null) {
@@ -473,10 +477,9 @@ import com.babylonhx.utils.typedarray.Float32Array;
 			this.rotation = Vector3.Zero();
 		}
 		
-		var rotationQuaternion:Quaternion = null;
 		if (space == null || space == Space.LOCAL) {
-			rotationQuaternion = Quaternion.RotationAxisToRef(axis, amount, AbstractMesh._rotationAxisCache);
-			this.rotationQuaternion.multiplyToRef(rotationQuaternion, this.rotationQuaternion);
+			Quaternion.RotationAxisToRef(axis, amount, AbstractMesh._rotationAxisCache);
+			this.rotationQuaternion.multiplyToRef(AbstractMesh._rotationAxisCache, this.rotationQuaternion);
 		}
 		else {
 			if (this.parent != null) {
@@ -485,8 +488,8 @@ import com.babylonhx.utils.typedarray.Float32Array;
 				
 				axis = Vector3.TransformNormal(axis, invertParentWorldMatrix);
 			}
-			rotationQuaternion = Quaternion.RotationAxisToRef(axis, amount, AbstractMesh._rotationAxisCache);
-			rotationQuaternion.multiplyToRef(this.rotationQuaternion, this.rotationQuaternion);
+			Quaternion.RotationAxisToRef(axis, amount, AbstractMesh._rotationAxisCache);
+			AbstractMesh._rotationAxisCache.multiplyToRef(this.rotationQuaternion, this.rotationQuaternion);
 		}
 	}
 
@@ -631,15 +634,15 @@ import com.babylonhx.utils.typedarray.Float32Array;
 			return false;
 		}
 		
-		if (!this._cache.rotation.equals(this.rotation)) {
-			return false;
-		}
-		
 		if (this.rotationQuaternion != null) {
 			if (!this._cache.rotationQuaternion.equals(this.rotationQuaternion)) {
 				return false;
 			}
 		} 
+		
+		if (!this._cache.rotation.equals(this.rotation)) {
+            return false;
+		}
 		
 		if (!this._cache.scaling.equals(this.scaling)) {
 			return false;
@@ -780,10 +783,10 @@ import com.babylonhx.utils.typedarray.Float32Array;
 					zero.x = localPosition.x + Tools.Epsilon;
 				}
 				if (this.billboardMode & AbstractMesh.BILLBOARDMODE_Y != 0) {
-					zero.y = localPosition.y + 0.001;
+					zero.y = localPosition.y + Tools.Epsilon;
 				}
 				if (this.billboardMode & AbstractMesh.BILLBOARDMODE_Z != 0) {
-					zero.z = localPosition.z + 0.001;
+					zero.z = localPosition.z + Tools.Epsilon;
 				}
 			}
 			
@@ -958,7 +961,7 @@ import com.babylonhx.utils.typedarray.Float32Array;
 		this._physicsMass = options.mass;
 		this._physicsFriction = options.friction;
 		this._physicRestitution = options.restitution;
-				
+		
 		return physicsEngine._registerMesh(this, impostor, options);
 	}
 
@@ -1287,6 +1290,9 @@ import com.babylonhx.utils.typedarray.Float32Array;
 		
 		// SubMeshes
 		this.releaseSubMeshes();
+		
+		// Engine
+		this.getScene().getEngine().unbindAllAttributes();
 		
 		// Remove from scene
 		this.getScene().removeMesh(this);
