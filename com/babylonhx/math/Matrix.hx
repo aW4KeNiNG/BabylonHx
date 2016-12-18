@@ -93,6 +93,38 @@ import haxe.ds.Vector;
 		
 		return this;
 	}
+	
+	inline public function reset():Matrix {
+		for (index in 0...16) {
+			this.m[index] = 0;
+		}
+		
+		return this;
+	}
+
+	inline public function add(other:Matrix):Matrix {
+		var result = new Matrix();
+		
+		this.addToRef(other, result);
+		
+		return result;
+	}
+
+	inline public function addToRef(other:Matrix, result:Matrix):Matrix {
+		for (index in 0...16) {
+			result.m[index] = this.m[index] + other.m[index];
+		}
+		
+		return this;
+	}
+
+	inline public function addToSelf(other:Matrix):Matrix {
+		for (index in 0...16) {
+			this.m[index] += other.m[index];
+		}
+		
+		return this;
+	}
 
 	inline public function invertToRef(other:Matrix):Matrix {
 		var l1 = this.m[0];
@@ -154,37 +186,6 @@ import haxe.ds.Vector;
 		
 		return this;
 	}
-	
-	inline public function reset():Matrix {
-        for (index in 0...16) {
-            this.m[index] = 0;
-        }
-		
-        return this;
-    }
-	
-    inline public function add(other:Matrix):Matrix {
-        var result = new Matrix();
-        this.addToRef(other, result);
-		
-        return result;
-    }
-
-    inline public function addToRef(other:Matrix, result:Matrix):Matrix {
-        for (index in 0...16) {
-            result.m[index] = this.m[index] + other.m[index];
-        }
-		
-        return this;
-    }
-
-    inline public function addToSelf(other:Matrix):Matrix {
-        for (index in 0...16) {
-            this.m[index] += other.m[index];
-        }
-		
-        return this;
-    }
 
 	inline public function setTranslation(vector3:Vector3):Matrix {
 		this.m[12] = vector3.x;
@@ -226,28 +227,62 @@ import haxe.ds.Vector;
 		return this;
 	}
 
-	inline public function multiplyToArray(other:Matrix, result: #if (js || html5 || purejs) Float32Array #else Array<Float> #end, offset:Int) {	
-		var tm = this.m;
-		var om = other.m;
-		result[offset] = tm[0] * om[0] + tm[1] * om[4] + tm[2] * om[8] + tm[3] * om[12];
-		result[offset + 1] = tm[0] * om[1] + tm[1] * om[5] + tm[2] * om[9] + tm[3] * om[13];
-		result[offset + 2] = tm[0] * om[2] + tm[1] * om[6] + tm[2] * om[10] + tm[3] * om[14];
-		result[offset + 3] = tm[0] * om[3] + tm[1] * om[7] + tm[2] * om[11] + tm[3] * om[15];
+	public function multiplyToArray(other:Matrix, result: #if (js || html5 || purejs) Float32Array #else Array<Float> #end, offset:Int) {	
+		var tm0 = this.m[0];
+		var tm1 = this.m[1];
+		var tm2 = this.m[2];
+		var tm3 = this.m[3];
+		var tm4 = this.m[4];
+		var tm5 = this.m[5];
+		var tm6 = this.m[6];
+		var tm7 = this.m[7];
+		var tm8 = this.m[8];
+		var tm9 = this.m[9];
+		var tm10 = this.m[10];
+		var tm11 = this.m[11];
+		var tm12 = this.m[12];
+		var tm13 = this.m[13];
+		var tm14 = this.m[14];
+		var tm15 = this.m[15];
 		
-		result[offset + 4] = tm[4] * om[0] + tm[5] * om[4] + tm[6] * om[8] + tm[7] * om[12];
-		result[offset + 5] = tm[4] * om[1] + tm[5] * om[5] + tm[6] * om[9] + tm[7] * om[13];
-		result[offset + 6] = tm[4] * om[2] + tm[5] * om[6] + tm[6] * om[10] + tm[7] * om[14];
-		result[offset + 7] = tm[4] * om[3] + tm[5] * om[7] + tm[6] * om[11] + tm[7] * om[15];
+		var om0 = other.m[0];
+		var om1 = other.m[1];
+		var om2 = other.m[2];
+		var om3 = other.m[3];
+		var om4 = other.m[4];
+		var om5 = other.m[5];
+		var om6 = other.m[6];
+		var om7 = other.m[7];
+		var om8 = other.m[8];
+		var om9 = other.m[9];
+		var om10 = other.m[10];
+		var om11 = other.m[11];
+		var om12 = other.m[12];
+		var om13 = other.m[13];
+		var om14 = other.m[14];
+		var om15 = other.m[15];
 		
-		result[offset + 8] = tm[8] * om[0] + tm[9] * om[4] + tm[10] * om[8] + tm[11] * om[12];
-		result[offset + 9] = tm[8] * om[1] + tm[9] * om[5] + tm[10] * om[9] + tm[11] * om[13];
-		result[offset + 10] = tm[8] * om[2] + tm[9] * om[6] + tm[10] * om[10] + tm[11] * om[14];
-		result[offset + 11] = tm[8] * om[3] + tm[9] * om[7] + tm[10] * om[11] + tm[11] * om[15];
+		result[offset] = tm0 * om0 + tm1 * om4 + tm2 * om8 + tm3 * om12;
+		result[offset + 1] = tm0 * om1 + tm1 * om5 + tm2 * om9 + tm3 * om13;
+		result[offset + 2] = tm0 * om2 + tm1 * om6 + tm2 * om10 + tm3 * om14;
+		result[offset + 3] = tm0 * om3 + tm1 * om7 + tm2 * om11 + tm3 * om15;
 		
-		result[offset + 12] = tm[12] * om[0] + tm[13] * om[4] + tm[14] * om[8] + tm[15] * om[12];
-		result[offset + 13] = tm[12] * om[1] + tm[13] * om[5] + tm[14] * om[9] + tm[15] * om[13];
-		result[offset + 14] = tm[12] * om[2] + tm[13] * om[6] + tm[14] * om[10] + tm[15] * om[14];
-		result[offset + 15] = tm[12] * om[3] + tm[13] * om[7] + tm[14] * om[11] + tm[15] * om[15];
+		result[offset + 4] = tm4 * om0 + tm5 * om4 + tm6 * om8 + tm7 * om12;
+		result[offset + 5] = tm4 * om1 + tm5 * om5 + tm6 * om9 + tm7 * om13;
+		result[offset + 6] = tm4 * om2 + tm5 * om6 + tm6 * om10 + tm7 * om14;
+		result[offset + 7] = tm4 * om3 + tm5 * om7 + tm6 * om11 + tm7 * om15;
+		
+		result[offset + 8] = tm8 * om0 + tm9 * om4 + tm10 * om8 + tm11 * om12;
+		result[offset + 9] = tm8 * om1 + tm9 * om5 + tm10 * om9 + tm11 * om13;
+		result[offset + 10] = tm8 * om2 + tm9 * om6 + tm10 * om10 + tm11 * om14;
+		result[offset + 11] = tm8 * om3 + tm9 * om7 + tm10 * om11 + tm11 * om15;
+		
+		result[offset + 12] = tm12 * om0 + tm13 * om4 + tm14 * om8 + tm15 * om12;
+		result[offset + 13] = tm12 * om1 + tm13 * om5 + tm14 * om9 + tm15 * om13;
+		result[offset + 14] = tm12 * om2 + tm13 * om6 + tm14 * om10 + tm15 * om14;
+		result[offset + 15] = tm12 * om3 + tm13 * om7 + tm14 * om11 + tm15 * om15;
+		
+		return this;
 	}
 
 	inline public function equals(value:Matrix):Bool {
@@ -296,6 +331,30 @@ import haxe.ds.Vector;
 		Quaternion.FromRotationMatrixToRef(Tmp.matrix[0], rotation);
 		
 		return true;
+	}
+	
+	public function getRotationMatrix():Matrix {
+		var result = Matrix.Identity();
+		
+		this.getRotationMatrixToRef(result);
+		
+		return result;
+	}
+
+	public function getRotationMatrixToRef(result:Matrix) {
+		var xs = m[0] * m[1] * m[2] * m[3] < 0 ? -1 : 1;
+		var ys = m[4] * m[5] * m[6] * m[7] < 0 ? -1 : 1;
+		var zs = m[8] * m[9] * m[10] * m[11] < 0 ? -1 : 1;
+		
+		var sx = xs * Math.sqrt(m[0] * m[0] + m[1] * m[1] + m[2] * m[2]);
+		var sy = ys * Math.sqrt(m[4] * m[4] + m[5] * m[5] + m[6] * m[6]);
+		var sz = zs * Math.sqrt(m[8] * m[8] + m[9] * m[9] + m[10] * m[10]);
+		
+		Matrix.FromValuesToRef(
+			m[0] / sx, m[1] / sx, m[2] / sx, 0,
+			m[4] / sy, m[5] / sy, m[6] / sy, 0,
+			m[8] / sz, m[9] / sz, m[10] / sz, 0,
+			0, 0, 0, 1, result);
 	}
 
 	// Statics
@@ -698,6 +757,44 @@ import haxe.ds.Vector;
 			Matrix._xAxis.z, Matrix._yAxis.z, Matrix._zAxis.z, 0,
 			ex, ey, ez, 1, result);
 	}
+	
+	public static function LookAtRH(eye:Vector3, target:Vector3, up:Vector3):Matrix {
+		var result = Matrix.Zero();
+		
+		Matrix.LookAtRHToRef(eye, target, up, result);
+		
+		return result;
+	}
+
+	public static function LookAtRHToRef(eye:Vector3, target:Vector3, up:Vector3, result:Matrix) {
+		// Z axis
+		eye.subtractToRef(target, Matrix._zAxis);
+		Matrix._zAxis.normalize();
+		
+		// X axis
+		Vector3.CrossToRef(up, Matrix._zAxis, Matrix._xAxis);
+		
+		if (Matrix._xAxis.lengthSquared() == 0) {
+			Matrix._xAxis.x = 1.0;
+		} 
+		else {
+			Matrix._xAxis.normalize();
+		}
+		
+		// Y axis
+		Vector3.CrossToRef(Matrix._zAxis, Matrix._xAxis, Matrix._yAxis);
+		Matrix._yAxis.normalize();
+		
+		// Eye angles
+		var ex = -Vector3.Dot(Matrix._xAxis, eye);
+		var ey = -Vector3.Dot(Matrix._yAxis, eye);
+		var ez = -Vector3.Dot(Matrix._zAxis, eye);
+		
+		return Matrix.FromValuesToRef(Matrix._xAxis.x, Matrix._yAxis.x, Matrix._zAxis.x, 0,
+			Matrix._xAxis.y, Matrix._yAxis.y, Matrix._zAxis.y, 0,
+			Matrix._xAxis.z, Matrix._yAxis.z, Matrix._zAxis.z, 0,
+			ex, ey, ez, 1, result);
+	}
 
 	inline public static function OrthoLH(width:Float, height:Float, znear:Float, zfar:Float):Matrix {
 		var hw = 2.0 / width;
@@ -713,27 +810,43 @@ import haxe.ds.Vector;
 
 	inline public static function OrthoOffCenterLH(left:Float, right:Float, bottom:Float, top:Float, znear:Float, zfar:Float):Matrix {
 		var matrix = Matrix.Zero();
+		
 		Matrix.OrthoOffCenterLHToRef(left, right, bottom, top, znear, zfar, matrix);
+		
 		return matrix;
 	}
 
 	public static function OrthoOffCenterLHToRef(left:Float, right:Float, bottom:Float, top:Float, znear:Float, zfar:Float, result:Matrix) {
-		result.m[0] = 2.0 / (right - left);
-		result.m[1] = 0;
-		result.m[2] = 0;
-		result.m[3] = 0;
-		result.m[5] = 2.0 / (top - bottom);
-		result.m[4] = 0;
-		result.m[6] = 0;
-		result.m[7] = 0;
-		result.m[10] = -1.0 / (znear - zfar);
-		result.m[8] = 0;
-		result.m[9] = 0;
-		result.m[11] = 0;
-		result.m[12] = (left + right) / (left - right);
-		result.m[13] = (top + bottom) / (bottom - top);
-		result.m[14] = znear / (znear - zfar);
-		result.m[15] = 1.0;
+		var rm = result.m;
+		rm[0] = 2.0 / (right - left);
+		rm[1] = 0;
+		rm[2] = 0;
+		rm[3] = 0;
+		rm[5] = 2.0 / (top - bottom);
+		rm[4] = 0;
+		rm[6] = 0;
+		rm[7] = 0;
+		rm[10] = 1.0 / (zfar - znear);
+		rm[8] = 0;
+		rm[9] = 0;
+		rm[11] = 0;
+		rm[12] = (left + right) / (left - right);
+		rm[13] = (top + bottom) / (bottom - top);
+		rm[14] = -znear / (zfar - znear);
+		rm[15] = 1.0;
+	}
+	
+	public static function OrthoOffCenterRH(left:Float, right:Float, bottom:Float, top:Float, znear:Float, zfar:Float):Matrix {
+		var matrix = Matrix.Zero();
+		
+		Matrix.OrthoOffCenterRHToRef(left, right, bottom, top, znear, zfar, matrix);
+		
+		return matrix;
+	}
+
+	public static function OrthoOffCenterRHToRef(left:Float, right:Float, bottom:Float, top:Float, znear:Float, zfar:Float, result:Matrix) {
+		Matrix.OrthoOffCenterLHToRef(left, right, bottom, top, znear, zfar, result);
+		result.m[10] *= -1.0;
 	}
 
 	inline public static function PerspectiveLH(width:Float, height:Float, znear:Float, zfar:Float):Matrix {
@@ -798,6 +911,75 @@ import haxe.ds.Vector;
 		result.m[12] = 0.0;
 		result.m[13] = 0.0;
 		result.m[15] = 0.0;
+		result.m[14] = (znear * zfar) / (znear - zfar);
+	}
+	
+	public static function PerspectiveFovRH(fov:Float, aspect:Float, znear:Float, zfar:Float):Matrix {
+		var matrix = Matrix.Zero();
+		
+		Matrix.PerspectiveFovRHToRef(fov, aspect, znear, zfar, matrix);
+		
+		return matrix;
+	}
+
+	public static function PerspectiveFovRHToRef(fov:Float, aspect:Float, znear:Float, zfar:Float, result:Matrix, isVerticalFovFixed:Bool = true) {
+		var tan = 1.0 / (Math.tan(fov * 0.5));
+		
+		if (isVerticalFovFixed) {
+			result.m[0] = tan / aspect;
+		}
+		else {
+			result.m[0] = tan;
+		}
+		
+		result.m[1] = 0;
+		result.m[2] = 0;
+		result.m[3] = 0;
+		
+		if (isVerticalFovFixed) {
+			result.m[5] = tan;
+		}
+		else {
+			result.m[5] = tan * aspect;
+		}
+		
+		result.m[4] = 0;
+		result.m[6] = 0;
+		result.m[7] = 0;
+		result.m[8] = 0;
+		result.m[9] = 0;
+		result.m[10] = zfar / (znear - zfar);
+		result.m[11] = -1.0;
+		result.m[12] = 0;
+		result.m[13] = 0;
+		result.m[15] = 0;
+		result.m[14] = (znear * zfar) / (znear - zfar);
+	}
+
+	public static function PerspectiveFovWebVRToRef(fov:Dynamic, znear:Float, zfar:Float, result:Matrix, isVerticalFovFixed:Bool = true) {
+		var upTan = Math.tan(fov.upDegrees * Math.PI / 180.0);
+		var downTan = Math.tan(fov.downDegrees * Math.PI / 180.0);
+		var leftTan = Math.tan(fov.leftDegrees * Math.PI / 180.0);
+		var rightTan = Math.tan(fov.rightDegrees * Math.PI / 180.0);
+		var xScale = 2.0 / (leftTan + rightTan);
+		var yScale = 2.0 / (upTan + downTan);
+		result.m[0] = xScale;
+		result.m[1] = 0;
+		result.m[2] = 0;
+		result.m[3] = 0;
+		result.m[4] = 0;
+		result.m[5] = yScale;
+		result.m[6] = 0;
+		result.m[7] = 0;
+		result.m[8] = ((leftTan - rightTan) * xScale * 0.5);
+		result.m[9] = -((upTan - downTan) * yScale * 0.5);
+		//result.m[10] = -(znear + zfar) / (zfar - znear);
+		result.m[10] = -zfar / (znear - zfar);
+		result.m[11] = 1.0;
+		result.m[12] = 0;
+		result.m[13] = 0;
+		result.m[15] = 0;
+		//result.m[14] = -(2.0 * zfar * znear) / (zfar - znear);
 		result.m[14] = (znear * zfar) / (znear - zfar);
 	}
 
@@ -885,6 +1067,63 @@ import haxe.ds.Vector;
 		result.m[12] = temp * plane.d;
 		result.m[13] = temp2 * plane.d;
 		result.m[14] = temp3 * plane.d;
+		result.m[15] = 1.0;
+	}
+	
+	public static function FromXYZAxesToRef(xaxis:Vector3, yaxis:Vector3, zaxis:Vector3, mat:Matrix) {		
+		mat.m[0] = xaxis.x;
+		mat.m[1] = xaxis.y;
+		mat.m[2] = xaxis.z;
+		
+		mat.m[3] = 0;
+		
+		mat.m[4] = yaxis.x;
+		mat.m[5] = yaxis.y;
+		mat.m[6] = yaxis.z;
+		
+		mat.m[7] = 0;
+		
+		mat.m[8] = zaxis.x;
+		mat.m[9] = zaxis.y;
+		mat.m[10] = zaxis.z;
+		
+		mat.m[11] = 0;
+		
+		mat.m[12] = 0;
+		mat.m[13] = 0;
+		mat.m[14] = 0;
+		
+		mat.m[15] = 1;
+	}
+	
+	public static function FromQuaternionToRef(quat:Quaternion, result:Matrix) {
+		var xx = quat.x * quat.x;
+		var yy = quat.y * quat.y;
+		var zz = quat.z * quat.z;
+		var xy = quat.x * quat.y;
+		var zw = quat.z * quat.w;
+		var zx = quat.z * quat.x;
+		var yw = quat.y * quat.w;
+		var yz = quat.y * quat.z;
+		var xw = quat.x * quat.w;
+		
+		result.m[0] = 1.0 - (2.0 * (yy + zz));
+		result.m[1] = 2.0 * (xy + zw);
+		result.m[2] = 2.0 * (zx - yw);
+		result.m[3] = 0;
+		result.m[4] = 2.0 * (xy - zw);
+		result.m[5] = 1.0 - (2.0 * (zz + xx));
+		result.m[6] = 2.0 * (yz + xw);
+		result.m[7] = 0;
+		result.m[8] = 2.0 * (zx + yw);
+		result.m[9] = 2.0 * (yz - xw);
+		result.m[10] = 1.0 - (2.0 * (yy + xx));
+		result.m[11] = 0;
+		
+		result.m[12] = 0;
+		result.m[13] = 0;
+		result.m[14] = 0;
+		
 		result.m[15] = 1.0;
 	}
 	

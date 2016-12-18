@@ -129,25 +129,35 @@ package com.babylonhx.math;
 		return result;
 	}
 	
-	public function toEulerAnglesToRef(result:Vector3, order:String = "YZX") {
+	public function toEulerAnglesToRef(result:Vector3, order:String = "YZX"):Quaternion {
+		var qz = this.z;
 		var qx = this.x;
 		var qy = this.y;
-		var qz = this.z;
 		var qw = this.w;
-		var xsqr = qx * qx;
 		
-		var t0 = -2.0 * (xsqr + qy * qy) + 1.0;
-		var t1 = 2.0 * (qz * qx + qw * qy);
-		var t2 = -2.0 * (qz * qy - qw * qx);
-		var t3 = 2.0 * (qx * qy + qw * qz);
-		var t4 = -2.0 * (qz * qz + xsqr) + 1.0;
+		var sqw = qw * qw;
+		var sqz = qz * qz;
+		var sqx = qx * qx;
+		var sqy = qy * qy;
 		
-		t2 = t2 > 1.0 ? 1.0 : t2;
-		t2 = t2 < -1.0 ? -1.0 : t2;
+		var zAxisY = qy * qz - qx * qw;
+		var limit = .4999999;
 		
-		result.x = Math.asin(t2);
-		result.z = Math.atan2(t3, t4);
-		result.y = Math.atan2(t1, t0);
+		if (zAxisY < -limit) {
+			result.y = 2 * Math.atan2(qy, qw);
+			result.x = Math.PI / 2;
+			result.z = 0;
+		}
+		else if (zAxisY > limit) {
+			result.y = 2 * Math.atan2(qy, qw);
+			result.x = -Math.PI / 2;
+			result.z = 0;
+		}
+		else {
+			result.z = Math.atan2(2.0 * (qx * qy + qz * qw), ( -sqz - sqx + sqy + sqw));
+			result.x = Math.asin( -2.0 * (qz * qy - qx * qw));
+			result.y = Math.atan2(2.0 * (qz * qx + qy * qw), (sqz - sqx - sqy + sqw));
+		}
 		
 		return this;
 	}
@@ -210,6 +220,7 @@ package com.babylonhx.math;
 	}
 
 	// Statics
+	
 	inline public static function FromRotationMatrix(matrix:Matrix):Quaternion {
 		var result = new Quaternion();
 		Quaternion.FromRotationMatrixToRef(matrix, result);
@@ -292,81 +303,20 @@ package com.babylonhx.math;
 		
 		return result;
 	}
-	
-	public static function LookRotation(forward:Vector3, ?up:Vector3) {
-		if (up == null) {
-			up  = Vector3.Up();
-		}
-		
-		forward.normalize();
-		
-		var vector:Vector3 = Vector3.Normalize(forward);
-		var vector2:Vector3 = Vector3.Normalize(Vector3.Cross(up, vector));
-		var vector3:Vector3 = Vector3.Cross(vector, vector2);
-		var m00 = vector2.x;
-		var m01 = vector2.y;
-		var m02 = vector2.z;
-		var m10 = vector3.x;
-		var m11 = vector3.y;
-		var m12 = vector3.z;
-		var m20 = vector.x;
-		var m21 = vector.y;
-		var m22 = vector.z;
-		
-		var num8:Float = (m00 + m11) + m22;
-		var quaternion:Quaternion = new Quaternion();
-		if (num8 > 0) {
-			var num = Math.sqrt(num8 + 1);
-			quaternion.w = num * 0.5;
-			num = 0.5 / num;
-			quaternion.x = (m12 - m21) * num;
-			quaternion.y = (m20 - m02) * num;
-			quaternion.z = (m01 - m10) * num;
-			
-			return quaternion;
-		}
-		
-		if ((m00 >= m11) && (m00 >= m22)) {
-			var num7 = Math.sqrt(((1 + m00) - m11) - m22);
-			var num4 = 0.5 / num7;
-			quaternion.x = 0.5 * num7;
-			quaternion.y = (m01 + m10) * num4;
-			quaternion.z = (m02 + m20) * num4;
-			quaternion.w = (m12 - m21) * num4;
-			
-			return quaternion;
-		}
-		
-		if (m11 > m22) {
-			var num6 = Math.sqrt(((1 + m11) - m00) - m22);
-			var num3 = 0.5 / num6;
-			quaternion.x = (m10+ m01) * num3;
-			quaternion.y = 0.5 * num6;
-			quaternion.z = (m21 + m12) * num3;
-			quaternion.w = (m20 - m02) * num3;
-			
-			return quaternion; 
-		}
-		
-		var num5 = Math.sqrt(((1 + m22) - m00) - m11);
-		var num2 = 0.5 / num5;
-		quaternion.x = (m20 + m02) * num2;
-		quaternion.y = (m21 + m12) * num2;
-		quaternion.z = 0.5 * num5;
-		quaternion.w = (m01 - m10) * num2;
-		
-		return quaternion;
-	}
 
 	inline public static function FromArray(array:Array<Float>, offset:Int = 0):Quaternion {
 		return new Quaternion(array[offset], array[offset + 1], array[offset + 2], array[offset + 3]);
 	}
 
 	inline public static function RotationYawPitchRoll(yaw:Float, pitch:Float, roll:Float):Quaternion {
-		return Quaternion.RotationYawPitchRollToRef(yaw, pitch, roll, new Quaternion());
+		var q = new Quaternion();
+		Quaternion.RotationYawPitchRollToRef(yaw, pitch, roll, q);
+		
+		return q;
 	}
 
-	inline public static function RotationYawPitchRollToRef(yaw:Float, pitch:Float, roll:Float, result:Quaternion):Quaternion {
+	inline public static function RotationYawPitchRollToRef(yaw:Float, pitch:Float, roll:Float, result:Quaternion) {
+		// Produces a quaternion from Euler angles in the z-y-x orientation (Tait-Bryan angles)
 		var halfRoll = roll * 0.5;
 		var halfPitch = pitch * 0.5;
 		var halfYaw = yaw * 0.5;
@@ -382,16 +332,22 @@ package com.babylonhx.math;
 		result.y = (sinYaw * cosPitch * cosRoll) - (cosYaw * sinPitch * sinRoll);
 		result.z = (cosYaw * cosPitch * sinRoll) - (sinYaw * sinPitch * cosRoll);
 		result.w = (cosYaw * cosPitch * cosRoll) + (sinYaw * sinPitch * sinRoll);
-		
-		return result;
 	}
 
 	public static function Slerp(left:Quaternion, right:Quaternion, amount:Float):Quaternion {
-		var num2 = 0.0;
-		var num3 = 0.0;
-		var num = amount;
-		var num4 = (((left.x * right.x) + (left.y * right.y)) + (left.z * right.z)) + (left.w * right.w);
-		var flag = false;
+		var result = Quaternion.Identity();
+		
+        Quaternion.SlerpToRef(left, right, amount, result);
+		
+        return result;
+	}
+	
+	public static function SlerpToRef(left:Quaternion, right:Quaternion, amount:Float, result:Quaternion) {
+		var num2:Float = 0.0;
+		var num3:Float = 0.0;
+		var num:Float = amount;
+		var num4:Float = (((left.x * right.x) + (left.y * right.y)) + (left.z * right.z)) + (left.w * right.w);
+		var flag:Bool = false;
 		
 		if (num4 < 0) {
 			flag = true;
@@ -409,7 +365,10 @@ package com.babylonhx.math;
 			num2 = flag ? ((-Math.sin(num * num5)) * num6) : ((Math.sin(num * num5)) * num6);
 		}
 		
-		return new Quaternion((num3 * left.x) + (num2 * right.x), (num3 * left.y) + (num2 * right.y), (num3 * left.z) + (num2 * right.z), (num3 * left.w) + (num2 * right.w));
+		result.x = (num3 * left.x) + (num2 * right.x);
+        result.y = (num3 * left.y) + (num2 * right.y);
+        result.z = (num3 * left.z) + (num2 * right.z);
+        result.w = (num3 * left.w) + (num2 * right.w);
 	}
 	
 }

@@ -306,6 +306,9 @@ import com.babylonhx.utils.typedarray.Float32Array;
 		return value;
 	}
 	
+	// VK: TEMP
+	public var extraData:Dynamic;
+	
 
 	public function new(name:String, scene:Scene) {
 		super(name, scene);
@@ -331,17 +334,17 @@ import com.babylonhx.utils.typedarray.Float32Array;
 	 * Getting the rotation object. 
 	 * If rotation quaternion is set, this vector will (almost always) be the Zero vector!
 	 */
-	private function get_rotation():Vector3 {
+	inline private function get_rotation():Vector3 {
 		return this._rotation;
 	}
-	private function set_rotation(newRotation:Vector3):Vector3 {
+	inline private function set_rotation(newRotation:Vector3):Vector3 {
 		return this._rotation = newRotation;
 	}
 
-	private function get_scaling():Vector3 {
+	inline private function get_scaling():Vector3 {
 		return this._scaling;
 	}
-	private function set_scaling(newScaling:Vector3):Vector3 {
+	inline private function set_scaling(newScaling:Vector3):Vector3 {
 		this._scaling = newScaling;
 		/*if (this.physicsImpostor != null) {
 			this.physicsImpostor.forceUpdate();
@@ -350,7 +353,7 @@ import com.babylonhx.utils.typedarray.Float32Array;
 		return newScaling;
 	}
 
-	private function get_rotationQuaternion():Quaternion {
+	inline private function get_rotationQuaternion():Quaternion {
 		return this._rotationQuaternion;
 	} 
 	private function set_rotationQuaternion(?quaternion:Quaternion):Quaternion {
@@ -469,7 +472,7 @@ import com.babylonhx.utils.typedarray.Float32Array;
     }
 
 	static var _rotationAxisCache:Quaternion = new Quaternion();
-	public function rotate(axis:Vector3, amount:Float, ?space:Space) {
+	public function rotate(axis:Vector3, amount:Float, ?space:Int) {
 		axis.normalize(); 
 		
 		if (this.rotationQuaternion == null) {
@@ -493,7 +496,7 @@ import com.babylonhx.utils.typedarray.Float32Array;
 		}
 	}
 
-	public function translate(axis:Vector3, distance:Float, ?space:Space) {
+	public function translate(axis:Vector3, distance:Float, ?space:Int) {
 		var displacementVector = axis.scale(distance);
 		
 		if (space == null || space == Space.LOCAL) {
@@ -873,11 +876,16 @@ import com.babylonhx.utils.typedarray.Float32Array;
 	/// <param name="rollCor" type="Number">optional roll (z-axis) correction in radians</param>
 	/// <returns>Mesh oriented towards targetMesh</returns>
 	static var _lookAtVectorCache:Vector3 = new Vector3(0, 0, 0);
-	inline public function lookAt(targetPoint:Vector3, yawCor:Float = 0, pitchCor:Float = 0, rollCor:Float = 0) {		
+	inline public function lookAt(targetPoint:Vector3, yawCor:Float = 0, pitchCor:Float = 0, rollCor:Float = 0, space:Int = Space.LOCAL) {		
 		var dv = AbstractMesh._lookAtVectorCache;
+		var pos = space == Space.LOCAL ? this.position : this.getAbsolutePosition();
+		targetPoint.subtractToRef(pos, dv);
 		var yaw = -Math.atan2(dv.z, dv.x) - Math.PI / 2;
 		var len = Math.sqrt(dv.x * dv.x + dv.z * dv.z);
 		var pitch = Math.atan2(dv.y, len);
+		if (this.rotationQuaternion == null) {
+			this.rotationQuaternion = new Quaternion();
+		}
 		Quaternion.RotationYawPitchRollToRef(yaw + yawCor, pitch + pitchCor, rollCor, this.rotationQuaternion);
 	}
 	
@@ -1189,6 +1197,7 @@ import com.babylonhx.utils.typedarray.Float32Array;
 			if (currentIntersectInfo != null) {
 				if (fastCheck || intersectInfo == null || currentIntersectInfo.distance < intersectInfo.distance) {
 					intersectInfo = currentIntersectInfo;
+					intersectInfo.subMeshId = index;
 					
 					if (fastCheck) {
 						break;
@@ -1216,6 +1225,7 @@ import com.babylonhx.utils.typedarray.Float32Array;
 			pickingInfo.bv = intersectInfo.bv;
 			pickingInfo.faceId = intersectInfo.faceId;
 			pickingInfo.subMeshId = intersectInfo.subMeshId;
+			
 			return pickingInfo;
 		}
 		
@@ -1333,6 +1343,60 @@ import com.babylonhx.utils.typedarray.Float32Array;
 		// Callback
 		this.onDisposeObservable.notifyObservers(this);
 		this.onDisposeObservable.clear();
+	}
+	
+	public function getDirection(localAxis:Vector3):Vector3 {
+		var result = Vector3.Zero();
+		
+		this.getDirectionToRef(localAxis, result);
+		
+		return result;
+	}
+
+	public function getDirectionToRef(localAxis:Vector3, result:Vector3) {
+		Vector3.TransformNormalToRef(localAxis, this.getWorldMatrix(), result);
+	}
+
+	public function setPivotPoint(point:Vector3) {
+		Vector3.TransformCoordinatesToRef(point, this.getWorldMatrix(), this.position);
+		
+		this._pivotMatrix.m[12] = -point.x;
+		this._pivotMatrix.m[13] = -point.y;
+		this._pivotMatrix.m[14] = -point.z;
+		
+		this._cache.pivotMatrixUpdated = true;
+	}
+
+	public function getPivotPoint():Vector3 {
+		var point = Vector3.Zero();
+		
+		this.getPivotPointToRef(point);
+		
+		return point;
+	}
+
+	public function getPivotPointToRef(result:Vector3) {
+		result.x = -this._pivotMatrix.m[12];
+		result.y = -this._pivotMatrix.m[13];
+		result.z = -this._pivotMatrix.m[14];
+	}
+
+	public function getAbsolutePivotPoint():Vector3 {
+		var point = Vector3.Zero();
+		
+		this.getAbsolutePivotPointToRef(point);
+		
+		return point;
+	}
+
+	public function getAbsolutePivotPointToRef(result:Vector3) {
+		result.x = this._pivotMatrix.m[12];
+		result.y = this._pivotMatrix.m[13];
+		result.z = this._pivotMatrix.m[14];
+		
+		this.getPivotPointToRef(result);
+		
+		Vector3.TransformCoordinatesToRef(result, this.getWorldMatrix(), result);
 	}
 	
 }

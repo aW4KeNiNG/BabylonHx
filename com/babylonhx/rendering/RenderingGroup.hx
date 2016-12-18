@@ -139,8 +139,10 @@ import com.babylonhx.materials.Material;
 		}
 		
 		// Transparent
-		this._renderTransparent(this._transparentSubMeshes);
-		engine.setAlphaMode(Engine.ALPHA_DISABLE);
+		if (this._transparentSubMeshes.length > 0) {
+			this._renderTransparent(this._transparentSubMeshes);
+			engine.setAlphaMode(Engine.ALPHA_DISABLE);
+		}
 		
 		return true;
 	}
@@ -274,8 +276,8 @@ import com.babylonhx.materials.Material;
 		this._alphaTestSubMeshes.reset();
 	}
 
-	var material:Material;
-	var mesh:AbstractMesh;
+	static var material:Material;
+	static var mesh:AbstractMesh;
 	/**
 	 * Inserts the submesh in its correct queue depending on its material.
 	 * @param subMesh The submesh to dispatch

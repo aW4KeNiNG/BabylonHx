@@ -237,14 +237,11 @@ import com.babylonhx.tools.EventState;
 
 	public function render(useCameraPostProcess:Bool = false) {
 		var scene = this.getScene();
+		var engine = scene.getEngine();
 		
 		if (this.useCameraPostProcesses == false) {
             useCameraPostProcess = this.useCameraPostProcesses;
         }
-		
-		if (this.activeCamera != null && this.activeCamera != scene.activeCamera) {
-    		scene.setTransformMatrix(this.activeCamera.getViewMatrix(), this.activeCamera.getProjectionMatrix(true));
-    	}
 		
 		if (this._waitingRenderList != null) {
 			this.renderList = [];
@@ -273,6 +270,19 @@ import com.babylonhx.tools.EventState;
 		if (this.renderList != null && this.renderList.length == 0) {
 			return;
 		}
+		
+		// Set custom projection.
+        // Needs to be before binding to prevent changing the aspect ratio.
+        if (this.activeCamera != null) {
+            engine.setViewport(this.activeCamera.viewport);
+			
+            if (this.activeCamera != scene.activeCamera) {
+                scene.setTransformMatrix(this.activeCamera.getViewMatrix(), this.activeCamera.getProjectionMatrix(true));
+            }
+        }
+        else {
+            engine.setViewport(scene.activeCamera.viewport);
+        }
 		
 		// Prepare renderingManager
 		this._renderingManager.reset();
@@ -321,6 +331,8 @@ import com.babylonhx.tools.EventState;
 		if (this.activeCamera != null && this.activeCamera != scene.activeCamera) {
     		scene.setTransformMatrix(scene.activeCamera.getViewMatrix(), scene.activeCamera.getProjectionMatrix(true));
     	}
+		
+		engine.setViewport(scene.activeCamera.viewport);
 		
 		scene.resetCachedMaterial();
 	}

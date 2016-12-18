@@ -692,7 +692,7 @@ typedef SMD = StandardMaterialDefines
                     attribs, uniforms, samplers,
                     join, fallbacks, this.onCompiled, this.onError, { maxSimultaneousLights: this.maxSimultaneousLights - 1 });
 		}
-		if (!this._effect.isReady()) {
+		if (this._effect == null || !this._effect.isReady()) {
 			return false;
 		}
 		

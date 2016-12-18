@@ -224,6 +224,12 @@ class PBRMaterial extends Material {
 	 */
 	@serializeAsTexture()
 	public var ambientTexture:BaseTexture;
+	
+	/**
+     * AKA Occlusion Texture Intensity in other nomenclature.
+     */
+    @serialize()
+    public var ambientTextureStrength:Float = 1.0;
 
 	@serializeAsTexture()
 	public var opacityTexture:BaseTexture;
@@ -239,6 +245,26 @@ class PBRMaterial extends Material {
 	 */
 	@serializeAsTexture()
 	public var reflectivityTexture:BaseTexture;
+	
+	/**
+     * Used to switch from specular/glossiness to metallic/roughness workflow.
+     */
+    @serializeAsTexture()
+    public var metallicTexture:BaseTexture;
+	
+	/**
+     * Specifies the metallic scalar of the metallic/roughness workflow.
+     * Can also be used to scale the metalness values of the metallic texture.
+     */
+    @serialize()
+    public var metallic:Float = Math.NEGATIVE_INFINITY;
+
+    /**
+     * Specifies the roughness scalar of the metallic/roughness workflow.
+     * Can also be used to scale the roughness values of the metallic texture.
+     */
+    @serialize()
+    public var roughness:Float = Math.NEGATIVE_INFINITY;
 
 	@serializeAsTexture()
 	public var bumpTexture:BaseTexture;
@@ -335,6 +361,18 @@ class PBRMaterial extends Material {
 	 */
 	@serialize()
 	public var useMicroSurfaceFromReflectivityMapAlpha:Bool = false;
+	
+	/**
+     * Specifies if the metallic texture contains the roughness information in its alpha channel.
+     */
+    @serialize()
+    public var useRoughnessFromMetallicTextureAlpha:Bool = true;
+
+    /**
+     * Specifies if the metallic texture contains the roughness information in its green channel.
+     */
+    @serialize()
+    public var useRoughnessFromMetallicTextureGreen:Bool = false;
 	
 	/**
 	 * In case the reflectivity map does not contain the microsurface information in its alpha channel,
@@ -602,184 +640,196 @@ class PBRMaterial extends Material {
 		
 		this._defines.reset();
 		
+		// Textures
 		if (scene.texturesEnabled) {
-			// Textures
-			if (scene.texturesEnabled) {
-				if (scene.getEngine().getCaps().textureLOD) {
-					this.defs[PBD.LODBASEDMICROSFURACE] = true;
+			if (scene.getEngine().getCaps().textureLOD) {
+				this.defs[PBD.LODBASEDMICROSFURACE] = true;
+			}
+			
+			if (this.albedoTexture != null && StandardMaterial.DiffuseTextureEnabled) {
+				if (!this.albedoTexture.isReady()) {
+					return false;
+				} 
+				else {
+					needUVs = true;
+					this.defs[PBD.ALBEDO] = true;
 				}
-				
-				if (this.albedoTexture != null && StandardMaterial.DiffuseTextureEnabled) {
-					if (!this.albedoTexture.isReady()) {
-						return false;
-					} 
-					else {
-						needUVs = true;
-						this.defs[PBD.ALBEDO] = true;
+			}
+			
+			if (this.ambientTexture != null && StandardMaterial.AmbientTextureEnabled) {
+				if (!this.ambientTexture.isReady()) {
+					return false;
+				} 
+				else {
+					needUVs = true;
+					this.defs[PBD.AMBIENT] = true;
+				}
+			}
+			
+			if (this.opacityTexture != null && StandardMaterial.OpacityTextureEnabled) {
+				if (!this.opacityTexture.isReady()) {
+					return false;
+				} 
+				else {
+					needUVs = true;
+					this.defs[PBD.OPACITY] = true;
+					
+					if (this.opacityTexture.getAlphaFromRGB) {
+						this.defs[PBD.OPACITYRGB] = true;
 					}
 				}
-				
-				if (this.ambientTexture != null && StandardMaterial.AmbientTextureEnabled) {
-					if (!this.ambientTexture.isReady()) {
-						return false;
-					} 
-					else {
-						needUVs = true;
-						this.defs[PBD.AMBIENT] = true;
+			}
+			
+			if (this.reflectionTexture != null && StandardMaterial.ReflectionTextureEnabled) {
+				if (!this.reflectionTexture.isReady()) {
+					return false;
+				} 
+				else {
+					needNormals = true;
+					this.defs[PBD.REFLECTION] = true;
+					
+					if (this.reflectionTexture.coordinatesMode == Texture.INVCUBIC_MODE) {
+						this.defs[PBD.INVERTCUBICMAP] = true;
 					}
-				}
-				
-				if (this.opacityTexture != null && StandardMaterial.OpacityTextureEnabled) {
-					if (!this.opacityTexture.isReady()) {
-						return false;
-					} 
-					else {
-						needUVs = true;
-						this.defs[PBD.OPACITY] = true;
-						
-						if (this.opacityTexture.getAlphaFromRGB) {
-							this.defs[PBD.OPACITYRGB] = true;
-						}
-					}
-				}
-				
-				if (this.reflectionTexture != null && StandardMaterial.ReflectionTextureEnabled) {
-					if (!this.reflectionTexture.isReady()) {
-						return false;
-					} 
-					else {
-						needNormals = true;
-						this.defs[PBD.REFLECTION] = true;
-						
-						if (this.reflectionTexture.coordinatesMode == Texture.INVCUBIC_MODE) {
-							this.defs[PBD.INVERTCUBICMAP] = true;
-						}
-						
-						this.defs[PBD.REFLECTIONMAP_3D] = this.reflectionTexture.isCube;
-						
-						switch (this.reflectionTexture.coordinatesMode) {
-							case Texture.CUBIC_MODE, Texture.INVCUBIC_MODE:
-								this.defs[PBD.REFLECTIONMAP_CUBIC] = true;
-								
-							case Texture.EXPLICIT_MODE:
-								this.defs[PBD.REFLECTIONMAP_EXPLICIT] = true;
-								
-							case Texture.PLANAR_MODE:
-								this.defs[PBD.REFLECTIONMAP_PLANAR] = true;
-								
-							case Texture.PROJECTION_MODE:
-								this.defs[PBD.REFLECTIONMAP_PROJECTION] = true;
-								
-							case Texture.SKYBOX_MODE:
-								this.defs[PBD.REFLECTIONMAP_SKYBOX] = true;
-								
-							case Texture.SPHERICAL_MODE:
-								this.defs[PBD.REFLECTIONMAP_SPHERICAL] = true;
-								
-							case Texture.EQUIRECTANGULAR_MODE:
-								this.defs[PBD.REFLECTIONMAP_EQUIRECTANGULAR] = true;
-								
-						}
-						
-						if (Std.is(this.reflectionTexture, HDRCubeTexture)) {
-							this.defs[PBD.USESPHERICALFROMREFLECTIONMAP] = true;
-							needNormals = true;
+					
+					this.defs[PBD.REFLECTIONMAP_3D] = this.reflectionTexture.isCube;
+					
+					switch (this.reflectionTexture.coordinatesMode) {
+						case Texture.CUBIC_MODE, Texture.INVCUBIC_MODE:
+							this.defs[PBD.REFLECTIONMAP_CUBIC] = true;
 							
-							if (untyped this.reflectionTexture.isPMREM) {
-								this.defs[PBD.USEPMREMREFLECTION] = true;
-							}
-						}
-					}
-				}
-				
-				if (this.lightmapTexture != null && StandardMaterial.LightmapTextureEnabled) {
-					if (!this.lightmapTexture.isReady()) {
-						return false;
-					} 
-					else {
-						needUVs = true;
-						this.defs[PBD.LIGHTMAP] = true;
-						this.defs[PBD.USELIGHTMAPASSHADOWMAP] = this.useLightmapAsShadowmap;
-					}
-				}
-				
-				if (this.emissiveTexture != null && StandardMaterial.EmissiveTextureEnabled) {
-					if (!this.emissiveTexture.isReady()) {
-						return false;
-					} 
-					else {
-						needUVs = true;
-						this.defs[PBD.EMISSIVE] = true;
-					}
-				}
-				
-				if (this.reflectivityTexture != null && StandardMaterial.SpecularTextureEnabled) {
-					if (!this.reflectivityTexture.isReady()) {
-						return false;
-					} 
-					else {
-						needUVs = true;
-						this.defs[PBD.REFLECTIVITY] = true;
-						this.defs[PBD.MICROSURFACEFROMREFLECTIVITYMAP] = this.useMicroSurfaceFromReflectivityMapAlpha;
-						this.defs[PBD.MICROSURFACEAUTOMATIC] = this.useAutoMicroSurfaceFromReflectivityMap;
-					}
-				}
-			}
-			
-			if (scene.getEngine().getCaps().standardDerivatives && this.bumpTexture != null && StandardMaterial.BumpTextureEnabled && !this.disableBumpMap) {
-				if (!this.bumpTexture.isReady()) {
-					return false;
-				} 
-				else {
-					needUVs = true;
-					this.defs[PBD.BUMP] = true;
-					
-					if (this.useParallax) {
-						this.defs[PBD.PARALLAX] = true;
-						if (this.useParallaxOcclusion) {
-							this.defs[PBD.PARALLAXOCCLUSION] = true;
-						}
+						case Texture.EXPLICIT_MODE:
+							this.defs[PBD.REFLECTIONMAP_EXPLICIT] = true;
+							
+						case Texture.PLANAR_MODE:
+							this.defs[PBD.REFLECTIONMAP_PLANAR] = true;
+							
+						case Texture.PROJECTION_MODE:
+							this.defs[PBD.REFLECTIONMAP_PROJECTION] = true;
+							
+						case Texture.SKYBOX_MODE:
+							this.defs[PBD.REFLECTIONMAP_SKYBOX] = true;
+							
+						case Texture.SPHERICAL_MODE:
+							this.defs[PBD.REFLECTIONMAP_SPHERICAL] = true;
+							
+						case Texture.EQUIRECTANGULAR_MODE:
+							this.defs[PBD.REFLECTIONMAP_EQUIRECTANGULAR] = true;
+							
 					}
 					
-					if (this.invertNormalMapX) {
-                        this.defs[PBD.INVERTNORMALMAPX] = true;
-                    }
-					
-					if (this.invertNormalMapY) {
-                        this.defs[PBD.INVERTNORMALMAPY] = true;
-                    }
-				}
-			}
-			
-			if (this.refractionTexture != null && StandardMaterial.RefractionTextureEnabled) {
-				if (!this.refractionTexture.isReady()) {
-					return false;
-				} 
-				else {
-					needUVs = true;
-					this.defs[PBD.REFRACTION] = true;
-					this.defs[PBD.REFRACTIONMAP_3D] = this.refractionTexture.isCube;
-					
-					if (this.linkRefractionWithTransparency) {
-						this.defs[PBD.LINKREFRACTIONTOTRANSPARENCY] = true;
-					}
-					if (Std.is(this.refractionTexture, HDRCubeTexture)) {
-						this.defs[PBD.REFRACTIONMAPINLINEARSPACE] = true;
+					if (Std.is(this.reflectionTexture, HDRCubeTexture)) {
+						this.defs[PBD.USESPHERICALFROMREFLECTIONMAP] = true;
+						needNormals = true;
 						
-						if (untyped this.refractionTexture.isPMREM) {
-							this.defs[PBD.USEPMREMREFRACTION] = true;
+						if (untyped this.reflectionTexture.isPMREM) {
+							this.defs[PBD.USEPMREMREFLECTION] = true;
 						}
 					}
 				}
 			}
 			
-			if (this.cameraColorGradingTexture != null && StandardMaterial.ColorGradingTextureEnabled) {
-				if (!this.cameraColorGradingTexture.isReady()) {
+			if (this.lightmapTexture != null && StandardMaterial.LightmapTextureEnabled) {
+				if (!this.lightmapTexture.isReady()) {
 					return false;
 				} 
 				else {
-					this.defs[PBD.CAMERACOLORGRADING] = true;
+					needUVs = true;
+					this.defs[PBD.LIGHTMAP] = true;
+					this.defs[PBD.USELIGHTMAPASSHADOWMAP] = this.useLightmapAsShadowmap;
 				}
+			}
+			
+			if (this.emissiveTexture != null && StandardMaterial.EmissiveTextureEnabled) {
+				if (!this.emissiveTexture.isReady()) {
+					return false;
+				} 
+				else {
+					needUVs = true;
+					this.defs[PBD.EMISSIVE] = true;
+				}
+			}
+			
+			if (StandardMaterial.SpecularTextureEnabled) {                        
+                if (this.metallicTexture != null) {
+                    if (!this.metallicTexture.isReady()) {
+                        return false;
+                    } 
+					else {
+                        needUVs = true;
+                        this.defs[PBD.METALLICWORKFLOW] = true;
+						this.defs[PBD.METALLICROUGHNESSMAP] = true;
+                        this.defs[PBD.METALLICROUGHNESSGSTOREINALPHA] = this.useRoughnessFromMetallicTextureAlpha;
+                        this.defs[PBD.METALLICROUGHNESSGSTOREINGREEN] = !this.useRoughnessFromMetallicTextureAlpha && this.useRoughnessFromMetallicTextureGreen;
+                    }
+                }
+                else if (this.reflectivityTexture != null) {
+                    if (!this.reflectivityTexture.isReady()) {
+                        return false;
+                    } 
+					else {
+                        needUVs = true;
+                        this.defs[PBD.REFLECTIVITY] = true;
+                        this.defs[PBD.MICROSURFACEFROMREFLECTIVITYMAP] = this.useMicroSurfaceFromReflectivityMapAlpha;
+                        this.defs[PBD.MICROSURFACEAUTOMATIC] = this.useAutoMicroSurfaceFromReflectivityMap;
+                    }
+                }
+            }
+		}
+		
+		if (scene.getEngine().getCaps().standardDerivatives && this.bumpTexture != null && StandardMaterial.BumpTextureEnabled && !this.disableBumpMap) {
+			if (!this.bumpTexture.isReady()) {
+				return false;
+			} 
+			else {
+				needUVs = true;
+				this.defs[PBD.BUMP] = true;
+				
+				if (this.useParallax && this.albedoTexture != null && StandardMaterial.DiffuseTextureEnabled) {
+					this.defs[PBD.PARALLAX] = true;
+					if (this.useParallaxOcclusion) {
+						this.defs[PBD.PARALLAXOCCLUSION] = true;
+					}
+				}
+				
+				if (this.invertNormalMapX) {
+					this.defs[PBD.INVERTNORMALMAPX] = true;
+				}
+				
+				if (this.invertNormalMapY) {
+					this.defs[PBD.INVERTNORMALMAPY] = true;
+				}
+			}
+		}
+		
+		if (this.refractionTexture != null && StandardMaterial.RefractionTextureEnabled) {
+			if (!this.refractionTexture.isReady()) {
+				return false;
+			} 
+			else {
+				needUVs = true;
+				this.defs[PBD.REFRACTION] = true;
+				this.defs[PBD.REFRACTIONMAP_3D] = this.refractionTexture.isCube;
+				
+				if (this.linkRefractionWithTransparency) {
+					this.defs[PBD.LINKREFRACTIONTOTRANSPARENCY] = true;
+				}
+				if (Std.is(this.refractionTexture, HDRCubeTexture)) {
+					this.defs[PBD.REFRACTIONMAPINLINEARSPACE] = true;
+					
+					if (untyped this.refractionTexture.isPMREM) {
+						this.defs[PBD.USEPMREMREFRACTION] = true;
+					}
+				}
+			}
+		}
+		
+		if (this.cameraColorGradingTexture != null && StandardMaterial.ColorGradingTextureEnabled) {
+			if (!this.cameraColorGradingTexture.isReady()) {
+				return false;
+			} 
+			else {
+				this.defs[PBD.CAMERACOLORGRADING] = true;
 			}
 		}
 		
@@ -877,6 +927,10 @@ class PBRMaterial extends Material {
 		if (this.useRadianceOverAlpha) {
 			this.defs[PBD.RADIANCEOVERALPHA] = true;
 		}
+		
+		if (this.metallic != Math.NEGATIVE_INFINITY || this.roughness != Math.NEGATIVE_INFINITY) {
+            this.defs[PBD.METALLICWORKFLOW] = true;
+        }
 		
 		// Attribs
 		if (mesh != null) {
@@ -1107,7 +1161,7 @@ class PBRMaterial extends Material {
 				if (this.ambientTexture != null && StandardMaterial.AmbientTextureEnabled) {
 					this._effect.setTexture("ambientSampler", this.ambientTexture);
 					
-					this._effect.setFloat2("vAmbientInfos", this.ambientTexture.coordinatesIndex, this.ambientTexture.level);
+					this._effect.setFloat3("vAmbientInfos", this.ambientTexture.coordinatesIndex, this.ambientTexture.level, this.ambientTextureStrength);
 					this._effect.setMatrix("ambientMatrix", this.ambientTexture.getTextureMatrix());
 				}
 				
@@ -1159,12 +1213,20 @@ class PBRMaterial extends Material {
 					this._effect.setMatrix("lightmapMatrix", this.lightmapTexture.getTextureMatrix());
 				}
 				
-				if (this.reflectivityTexture != null && StandardMaterial.SpecularTextureEnabled) {
-					this._effect.setTexture("reflectivitySampler", this.reflectivityTexture);
-					
-					this._effect.setFloat2("vReflectivityInfos", this.reflectivityTexture.coordinatesIndex, this.reflectivityTexture.level);
-					this._effect.setMatrix("reflectivityMatrix", this.reflectivityTexture.getTextureMatrix());
-				}
+				if (StandardMaterial.SpecularTextureEnabled) {
+                    if (this.metallicTexture != null) {
+                        this._effect.setTexture("reflectivitySampler", this.metallicTexture);
+						
+                        this._effect.setFloat2("vReflectivityInfos", this.metallicTexture.coordinatesIndex, this.metallicTexture.level);
+                        this._effect.setMatrix("reflectivityMatrix", this.metallicTexture.getTextureMatrix());
+                    }
+                    else if (this.reflectivityTexture != null) {
+                        this._effect.setTexture("reflectivitySampler", this.reflectivityTexture);
+						
+                        this._effect.setFloat2("vReflectivityInfos", this.reflectivityTexture.coordinatesIndex, this.reflectivityTexture.level);
+                        this._effect.setMatrix("reflectivityMatrix", this.reflectivityTexture.getTextureMatrix());
+                    }
+                }
 				
 				if (this.bumpTexture != null && this._myScene.getEngine().getCaps().standardDerivatives && StandardMaterial.BumpTextureEnabled && !this.disableBumpMap) {
 					this._effect.setTexture("bumpSampler", this.bumpTexture);
@@ -1211,12 +1273,19 @@ class PBRMaterial extends Material {
 			// Colors
 			this._myScene.ambientColor.multiplyToRef(this.ambientColor, this._globalAmbientColor);
 			
-			// GAMMA CORRECTION.
-			this.convertColorToLinearSpaceToRef(this.reflectivityColor, PBRMaterial._scaledReflectivity);
+			if (this.defs[PBD.METALLICWORKFLOW]) {
+				PBRMaterial._scaledReflectivity.r = this.metallic == Math.NEGATIVE_INFINITY ? 1 : this.metallic;
+				PBRMaterial._scaledReflectivity.g = this.roughness == Math.NEGATIVE_INFINITY ? 1 : this.roughness;
+				this._effect.setColor4("vReflectivityColor", PBRMaterial._scaledReflectivity, 0);
+			}
+			else {
+				// GAMMA CORRECTION.
+				this.convertColorToLinearSpaceToRef(this.reflectivityColor, PBRMaterial._scaledReflectivity);
+				this._effect.setColor4("vReflectivityColor", PBRMaterial._scaledReflectivity, this.microSurface);
+			}
 			
 			this._effect.setVector3("vEyePosition", this._myScene._mirroredCameraPosition != null ? this._myScene._mirroredCameraPosition : this._myScene.activeCamera.position);
 			this._effect.setColor3("vAmbientColor", this._globalAmbientColor);
-			this._effect.setColor4("vReflectivityColor", PBRMaterial._scaledReflectivity, this.microSurface);
 			
 			// GAMMA CORRECTION.
 			this.convertColorToLinearSpaceToRef(this.emissiveColor, PBRMaterial._scaledEmissive);
@@ -1270,8 +1339,7 @@ class PBRMaterial extends Material {
 			this._overloadedIntensity.w = this.overloadedEmissiveIntensity;
 			this._effect.setVector4("vOverloadedIntensity", this._overloadedIntensity);
 			
-			this.convertColorToLinearSpaceToRef(this.overloadedAmbient, this._tempColor);
-			this._effect.setColor3("vOverloadedAmbient", this._tempColor);
+			this._effect.setColor3("vOverloadedAmbient", this.overloadedAmbient);
 			this.convertColorToLinearSpaceToRef(this.overloadedAlbedo, this._tempColor);
 			this._effect.setColor3("vOverloadedAlbedo", this._tempColor);
 			this.convertColorToLinearSpaceToRef(this.overloadedReflectivity, this._tempColor);
@@ -1317,7 +1385,10 @@ class PBRMaterial extends Material {
 			results.push(this.emissiveTexture);
 		}
 		
-		if (this.reflectivityTexture != null && this.reflectivityTexture.animations != null && this.reflectivityTexture.animations.length > 0) {
+		if (this.metallicTexture != null && this.metallicTexture.animations != null && this.metallicTexture.animations.length > 0) {
+            results.push(this.metallicTexture);
+        }
+        else if (this.reflectivityTexture != null && this.reflectivityTexture.animations != null && this.reflectivityTexture.animations.length > 0) {
 			results.push(this.reflectivityTexture);
 		}
 		
@@ -1360,6 +1431,10 @@ class PBRMaterial extends Material {
 			
 			if (this.emissiveTexture != null) {
 				this.emissiveTexture.dispose();
+			}
+			
+			if (this.metallicTexture != null) {
+				this.metallicTexture.dispose();
 			}
 			
 			if (this.reflectivityTexture != null) {

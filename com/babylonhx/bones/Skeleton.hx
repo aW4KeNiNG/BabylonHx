@@ -37,6 +37,8 @@ import haxe.ds.Vector;
 	
 	private var _ranges:Map<String, AnimationRange> = new Map();
 	
+	private var _lastAbsoluteTransformsUpdateId:Int = -1;
+	
 	public var __smartArrayFlags:Array<Int> = [];
 	
 
@@ -60,12 +62,38 @@ import haxe.ds.Vector;
 			return mesh._bonesTransformMatrices;
 		}
 		
+		if (this._transformMatrices == null) {
+            this.prepare();
+        }
+		
 		return this._transformMatrices;
 	}
 	
 	public function getScene():Scene {
 		return this._scene;
 	}
+	
+	/**
+	 * @param {boolean} fullDetails - support for multiple levels of logging within scene loading
+	 */
+	/*public function toString(fullDetails:Bool = false):String {
+		var ret = 'Name: ${this.name}, nBones: ${this.bones.length}';
+		ret += ', nAnimationRanges: ${this._ranges != null ? Object.keys(this._ranges).length : "none"}';
+		if (fullDetails) {
+			ret += ', Ranges: {';
+			var first = true;
+			for (name in this._ranges) {
+				if (first) {
+					ret += ', ';
+					first = false;
+				}
+				ret += name;
+			}
+			ret += '}';
+		}
+		
+		return ret;
+	}*/
 	
 	/**
 	* Get bone's index searching by name
@@ -331,6 +359,26 @@ import haxe.ds.Vector;
 		}
 	}
 	
+	public function computeAbsoluteTransforms(forceUpdate:Bool = false) {
+		var renderId = this._scene.getRenderId();
+		
+		if (this._lastAbsoluteTransformsUpdateId != renderId || forceUpdate ) {
+			this.bones[0].computeAbsoluteTransforms();
+			this._lastAbsoluteTransformsUpdateId = renderId;
+		}
+		
+	}
+	
+	public function getPoseMatrix():Matrix {            
+		var poseMatrix:Matrix = null;
+		
+		if (this._meshesWithPoseMatrix.length > 0){
+			poseMatrix = this._meshesWithPoseMatrix[0].getPoseMatrix();
+		}
+		
+		return poseMatrix;
+	}
+	
 	public function dispose() {
 		this._meshesWithPoseMatrix = [];
 		
@@ -386,7 +434,10 @@ import haxe.ds.Vector;
 	
 	public static function Parse(parsedSkeleton:Dynamic, scene:Scene):Skeleton {
         var skeleton = new Skeleton(parsedSkeleton.name, parsedSkeleton.id, scene);
-		
+		if (parsedSkeleton.dimensionsAtRest != null) {
+			skeleton.dimensionsAtRest = Vector3.FromArray(parsedSkeleton.dimensionsAtRest);
+		}
+			
 		skeleton.needInitialSkinMatrix = parsedSkeleton.needInitialSkinMatrix;
 		
 		try {

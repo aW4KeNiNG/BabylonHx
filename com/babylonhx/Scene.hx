@@ -10,6 +10,7 @@ import com.babylonhx.animations.IAnimatable;
 import com.babylonhx.bones.Skeleton;
 import com.babylonhx.bones.Bone;
 import com.babylonhx.cameras.FreeCamera;
+import com.babylonhx.cameras.ArcRotateCamera;
 import com.babylonhx.collisions.Collider;
 import com.babylonhx.collisions.PickingInfo;
 import com.babylonhx.culling.octrees.Octree;
@@ -60,6 +61,8 @@ import com.babylonhx.tools.Observer;
 import com.babylonhx.tools.EventState;
 import com.babylonhx.tools.StringDictionary;
 
+import com.babylonhx.d2.display.Stage;
+
 #if (purejs || js)
 import com.babylonhx.audio.*;
 #end
@@ -91,6 +94,7 @@ import com.babylonhx.audio.*;
 	public var clipPlane:Plane;
 	public var animationsEnabled:Bool = true;
 	public var constantlyUpdateMeshUnderPointer:Bool = false;
+	public var useRightHandedSystem:Bool = false;
 	
 	// Events
 
@@ -309,6 +313,13 @@ import com.babylonhx.audio.*;
 	public var fogDensity:Float = 0.1;
 	public var fogStart:Float = 0;
 	public var fogEnd:Float = 1000.0;
+	
+	// 2D
+	private var _stage2D:Stage;
+	public var stage2D(get, never):Stage;
+	inline private function get_stage2D():Stage {
+		return _stage2D;
+	}
 
 	// Lights
 	/**
@@ -739,6 +750,32 @@ import com.babylonhx.audio.*;
      	}
     }
     #end
+	
+	public function init2D():Stage {
+		if (this.activeCamera != null) {
+			if (this._stage2D == null) {
+				this._stage2D = new Stage(this);
+			}
+			
+			#if mobile
+			
+			#else
+			_engine.mouseDown.push(stage2D._onMD);
+			_engine.mouseMove.push(stage2D._onMM);
+			_engine.mouseUp.push(stage2D._onMU);
+			
+			_engine.keyDown.push(stage2D._onKD);
+			_engine.keyUp.push(stage2D._onKU);
+			#end
+			
+			return this._stage2D;
+		}
+		else {
+			trace("No active camera! You need to initialize your 3D stuff first.");
+			
+			return null;
+		}
+	}
 
 	// Stats
 	inline public function getLastFrameDuration():Float {
@@ -833,9 +870,13 @@ import com.babylonhx.audio.*;
 			}
 			
 			// Meshes
-			var pickResult:PickingInfo = this.pick(this._unTranslatedPointerX, this._unTranslatedPointerY, pointerMovePredicate,
-				false,
-				this.cameraToUseForPointers);
+			var pickResult:PickingInfo = this.pick(
+				this._unTranslatedPointerX, 
+				this._unTranslatedPointerY, 
+				this.pointerMovePredicate,
+				false, 
+				this.cameraToUseForPointers
+			);
 				
 			if (pickResult.hit && pickResult.pickedMesh != null) {
 				this.setPointerOverSprite(null);
@@ -900,13 +941,14 @@ import com.babylonhx.audio.*;
 			
 			if (this.pointerDownPredicate == null) {
 				this.pointerDownPredicate = function(mesh:AbstractMesh):Bool {
-					return mesh.isPickable && mesh.isVisible && mesh.isReady() && (mesh.actionManager == null || mesh.actionManager.hasPointerTriggers);
+					return mesh.isPickable && mesh.isVisible && mesh.isReady();
 				};
 			}
 			
 			// Meshes
 			this._pickedDownMesh = null;			
-			var pickResult:PickingInfo = this.pick(this._pointerX, this._pointerY, this.pointerDownPredicate, false, this.cameraToUseForPointers);
+			var pickResult:PickingInfo = this.pick(this._unTranslatedPointerX, this._unTranslatedPointerY, this.pointerDownPredicate, false, this.cameraToUseForPointers);
+			
 			if (pickResult.hit && pickResult.pickedMesh != null) {				
 				if (pickResult.pickedMesh.actionManager != null) {
 					this._pickedDownMesh = pickResult.pickedMesh;
@@ -926,10 +968,12 @@ import com.babylonhx.audio.*;
 								pickResult.pickedMesh.actionManager.processTrigger(ActionManager.OnLeftPickTrigger, ActionEvent.CreateNew(pickResult.pickedMesh));							
 						}
 						
-						pickResult.pickedMesh.actionManager.processTrigger(ActionManager.OnPickTrigger, ActionEvent.CreateNew(pickResult.pickedMesh));
+						if (pickResult.pickedMesh.actionManager != null) {
+							pickResult.pickedMesh.actionManager.processTrigger(ActionManager.OnPickTrigger, ActionEvent.CreateNew(pickResult.pickedMesh));
+						}
 					}
 					
-					if (pickResult.pickedMesh.actionManager.hasSpecificTrigger(ActionManager.OnLongPressTrigger)) {				
+					if (pickResult.pickedMesh.actionManager != null && pickResult.pickedMesh.actionManager.hasSpecificTrigger(ActionManager.OnLongPressTrigger)) {				
 						Tools.delay(function () {
 							var pickResult = this.pick(this._unTranslatedPointerX, this._unTranslatedPointerY,
 								function(mesh:AbstractMesh):Bool { return mesh.isPickable && mesh.isVisible && mesh.isReady() && mesh.actionManager != null && mesh.actionManager.hasSpecificTrigger(ActionManager.OnLongPressTrigger); },
@@ -980,7 +1024,10 @@ import com.babylonhx.audio.*;
 								pickResult.pickedSprite.actionManager.processTrigger(ActionManager.OnLeftPickTrigger, ActionEvent.CreateNewFromSprite(pickResult.pickedSprite, this));
 							
 						}
-						pickResult.pickedSprite.actionManager.processTrigger(ActionManager.OnPickTrigger, ActionEvent.CreateNewFromSprite(pickResult.pickedSprite, this));
+						
+						if (pickResult.pickedSprite.actionManager != null) {
+							pickResult.pickedSprite.actionManager.processTrigger(ActionManager.OnPickTrigger, ActionEvent.CreateNewFromSprite(pickResult.pickedSprite, this));
+						}
 					}
 				}
 			}
@@ -1005,7 +1052,7 @@ import com.babylonhx.audio.*;
 			
 			if (this.pointerUpPredicate == null) {
 				this.pointerUpPredicate = function(mesh:AbstractMesh):Bool {
-					return mesh.isPickable && mesh.isVisible && mesh.isReady() && (mesh.actionManager == null || (mesh.actionManager.hasPickTriggers || mesh.actionManager.hasSpecificTrigger(ActionManager.OnLongPressTrigger)));
+					return mesh.isPickable && mesh.isVisible && mesh.isReady();
 				};
 			}
 			
@@ -1025,13 +1072,14 @@ import com.babylonhx.audio.*;
 				}
 				if (pickResult.pickedMesh.actionManager != null) {
 					pickResult.pickedMesh.actionManager.processTrigger(ActionManager.OnPickUpTrigger, ActionEvent.CreateNew(pickResult.pickedMesh, button));
-					
-					if (Math.abs(this._startingPointerPosition.x - this._pointerX) < ActionManager.DragMovementThreshold && Math.abs(this._startingPointerPosition.y - this._pointerY) < ActionManager.DragMovementThreshold) {
-						pickResult.pickedMesh.actionManager.processTrigger(ActionManager.OnPickTrigger, ActionEvent.CreateNew(pickResult.pickedMesh, button));
+					if (pickResult.pickedMesh.actionManager != null) {
+						if (Math.abs(this._startingPointerPosition.x - this._pointerX) < ActionManager.DragMovementThreshold && Math.abs(this._startingPointerPosition.y - this._pointerY) < ActionManager.DragMovementThreshold) {
+							pickResult.pickedMesh.actionManager.processTrigger(ActionManager.OnPickTrigger, ActionEvent.CreateNew(pickResult.pickedMesh, button));
+						}
 					}
 				}
 			}
-			if (this._pickedDownMesh != null && this._pickedDownMesh != pickResult.pickedMesh) {
+			if (this._pickedDownMesh != null && this._pickedDownMesh.actionManager != null && this._pickedDownMesh != pickResult.pickedMesh) {
 				this._pickedDownMesh.actionManager.processTrigger(ActionManager.OnPickOutTrigger, ActionEvent.CreateNew(this._pickedDownMesh));
 			}
 			
@@ -1055,12 +1103,14 @@ import com.babylonhx.audio.*;
 					if (pickResult.pickedSprite.actionManager != null) {
 						pickResult.pickedSprite.actionManager.processTrigger(ActionManager.OnPickUpTrigger, ActionEvent.CreateNewFromSprite(pickResult.pickedSprite, this));
 						
-						if (Math.abs(this._startingPointerPosition.x - this._pointerX) < ActionManager.DragMovementThreshold && Math.abs(this._startingPointerPosition.y - this._pointerY) < ActionManager.DragMovementThreshold) {
-							pickResult.pickedSprite.actionManager.processTrigger(ActionManager.OnPickTrigger, ActionEvent.CreateNewFromSprite(pickResult.pickedSprite, this));
+						if (pickResult.pickedSprite.actionManager != null) {
+							if (Math.abs(this._startingPointerPosition.x - this._pointerX) < ActionManager.DragMovementThreshold && Math.abs(this._startingPointerPosition.y - this._pointerY) < ActionManager.DragMovementThreshold) {
+								pickResult.pickedSprite.actionManager.processTrigger(ActionManager.OnPickTrigger, ActionEvent.CreateNewFromSprite(pickResult.pickedSprite, this));
+							}
 						}
 					}
 				}
-				if (this._pickedDownSprite != null && this._pickedDownSprite != pickResult.pickedSprite) {
+				if (this._pickedDownSprite != null && this._pickedDownSprite.actionManager != null && this._pickedDownSprite != pickResult.pickedSprite) {
 					this._pickedDownSprite.actionManager.processTrigger(ActionManager.OnPickOutTrigger, ActionEvent.CreateNewFromSprite(this._pickedDownSprite, this));
 				}
 			}
@@ -1077,33 +1127,30 @@ import com.babylonhx.audio.*;
 				this.actionManager.processTrigger(ActionManager.OnKeyUpTrigger, ActionEvent.CreateNewFromScene(this, keycode));
 			}
 		};
-
+		
 		this.getEngine().touchDown.push(this._onPointerDown);
 		this.getEngine().touchUp.push(this._onPointerUp);
 		this.getEngine().touchMove.push(this._onPointerMove);
-
+		
 		this.getEngine().mouseDown.push(this._onPointerDown);
 		this.getEngine().mouseUp.push(this._onPointerUp);
 		this.getEngine().mouseMove.push(this._onPointerMove);
-
-		this.getEngine().keyDown.push(this._onKeyDown);
-		this.getEngine().keyUp.push(this._onKeyUp);
 		
+		this.getEngine().keyDown.push(this._onKeyDown);
+		this.getEngine().keyUp.push(this._onKeyUp);		
 	}
 
 	public function detachControl() {
-
 		this.getEngine().touchDown.remove(this._onPointerDown);
 		this.getEngine().touchUp.remove(this._onPointerUp);
 		this.getEngine().touchMove.remove(this._onPointerMove);
-
+		
 		this.getEngine().mouseDown.remove(this._onPointerDown);
 		this.getEngine().mouseUp.remove(this._onPointerUp);
 		this.getEngine().mouseMove.remove(this._onPointerMove);
-
-		this.getEngine().keyDown.remove(this._onKeyDown);
-		this.getEngine().keyUp.remove(this._onKeyUp);
 		
+		this.getEngine().keyDown.remove(this._onKeyDown);
+		this.getEngine().keyUp.remove(this._onKeyUp);		
 	}
 
 	// Ready
@@ -2139,6 +2186,8 @@ import com.babylonhx.audio.*;
         }
 		
 		// Render targets
+		//this._renderTargetsDuration.beginMonitoring();
+		var needsRestoreFrameBuffer = false;
 		var beforeRenderTargetDate = Tools.Now();
 		if (this.renderTargetsEnabled && this._renderTargets.length > 0) {
 			this._intermediateRendering = true;
@@ -2157,8 +2206,40 @@ import com.babylonhx.audio.*;
 			this._intermediateRendering = false;
 			this._renderId++;
 			
-            engine.restoreDefaultFramebuffer();  // Restore back buffer
+            needsRestoreFrameBuffer = true;  // Restore back buffer
         }
+		
+		// Render HighlightLayer Texture
+		var stencilState = this._engine.getStencilBuffer();
+		var renderhighlights = false;
+		if (this.renderTargetsEnabled && this.highlightLayers != null && this.highlightLayers.length > 0) {
+			this._intermediateRendering = true;
+			for (i in 0...this.highlightLayers.length) {
+				var highlightLayer:HighlightLayer = this.highlightLayers[i];
+				
+				if (highlightLayer.shouldRender() &&
+					(highlightLayer.camera == null ||
+						(highlightLayer.camera.cameraRigMode == Camera.RIG_MODE_NONE && camera == highlightLayer.camera) ||
+						(highlightLayer.camera.cameraRigMode != Camera.RIG_MODE_NONE && highlightLayer.camera._rigCameras.indexOf(camera) > -1))) {
+					
+					renderhighlights = true;
+					
+					var renderTarget = highlightLayer._mainTexture;
+					if (renderTarget._shouldRender()) {
+						this._renderId++;
+						renderTarget.render(false);
+						needsRestoreFrameBuffer = true;
+					}
+				}
+			}
+			
+			this._intermediateRendering = false;
+			this._renderId++;
+		}
+		
+		if (needsRestoreFrameBuffer) {
+			engine.restoreDefaultFramebuffer();
+		}
 		
 		this._renderTargetsDuration += Tools.Now() - beforeRenderTargetDate;
 		
@@ -2183,17 +2264,8 @@ import com.babylonhx.audio.*;
 		//Tools.StartPerformanceCounter("Main render");
 		
 		// Activate HighlightLayer stencil
-		var stencilState = this._engine.getStencilBuffer();
-		var renderhighlights:Bool = false;
-		if (this.highlightLayers.length > 0) {
-			for (i in 0...this.highlightLayers.length) {
-				var highlightLayer = this.highlightLayers[i];
-                if ((highlightLayer.camera == null || camera == highlightLayer.camera) && highlightLayer.shouldRender()) {
-					renderhighlights = true;
-					this._engine.setStencilBuffer(true);
-					break;
-				}
-			}
+		if (renderhighlights) {
+			this._engine.setStencilBuffer(true);
 		}
 		
 		this._renderingManager.render(null, null, true, true);
@@ -2247,8 +2319,6 @@ import com.babylonhx.audio.*;
 			}
 			engine.setDepthBuffer(true);
 		}
-		
-		this._renderDuration += Tools.Now() - beforeRenderDate;
 		
 		// Finalize frame
 		this.postProcessManager._finalizeFrame(camera.isIntermediate);
@@ -2324,8 +2394,7 @@ import com.babylonhx.audio.*;
 	}
 
 	public function render() {
-		//var startDate = Tools.Now();
-		this._particlesDuration = 0;
+		/*this._particlesDuration = 0;
 		this._spritesDuration = 0;
 		this._activeParticles = 0;
 		this._renderDuration = 0;
@@ -2333,7 +2402,7 @@ import com.babylonhx.audio.*;
 		this._evaluateActiveMeshesDuration = 0;
 		this._totalVertices = 0;
 		this._activeIndices = 0;
-		this._activeBones = 0;
+		this._activeBones = 0;*/
 		this.getEngine().resetDrawCalls();
 		this._meshesForIntersections.reset();
 		this.resetCachedMaterial();
@@ -2437,23 +2506,12 @@ import com.babylonhx.audio.*;
 			this._renderTargets.push(this._depthRenderer.getDepthMap());
 		}
 		
-		// HighlightLayer
-		if (this.highlightLayers.length > 0) {
-			for (i in 0...this.highlightLayers.length) {
-				if (this.highlightLayers[i].shouldRender()) {
-					this._renderTargets.push(this.highlightLayers[i]._mainTexture);
-				}
-			}
-		}
-		
 		// RenderPipeline
 		this.postProcessRenderPipelineManager.update();
 		
 		// Multi-cameras?
 		if (this.activeCameras.length > 0) {
-			var currentRenderId = this._renderId;
 			for (cameraIndex in 0...this.activeCameras.length) {
-				this._renderId = currentRenderId;
 				if (cameraIndex > 0) {
                     this._engine.clear(0, false, true, true);
                 }
@@ -2493,9 +2551,6 @@ import com.babylonhx.audio.*;
 		if (this.dumpNextRenderTargets) {
 			this.dumpNextRenderTargets = false;
 		}
-		
-		//Tools.EndPerformanceCounter("Scene rendering");
-		//this._lastFrameDuration = Tools.Now() - startDate;
 	}
 	
 	public function enableDepthRenderer():DepthRenderer {
@@ -2781,6 +2836,35 @@ import com.babylonhx.audio.*;
 		return pickingInfo != null ? pickingInfo : new PickingInfo();
 	}
 	
+	private function _internalMultiPick(rayFunction:Matrix->Ray, predicate:AbstractMesh->Bool):Array<PickingInfo> {
+		var pickingInfos:Array<PickingInfo> = [];
+		
+		for (meshIndex in 0...this.meshes.length) {
+			var mesh = this.meshes[meshIndex];
+			
+			if (predicate != null) {
+				if (!predicate(mesh)) {
+					continue;
+				}
+			} 
+			else if (!mesh.isEnabled() || !mesh.isVisible || !mesh.isPickable) {
+				continue;
+			}
+			
+			var world = mesh.getWorldMatrix();
+			var ray = rayFunction(world);
+			
+			var result = mesh.intersects(ray, false);
+			if (result ==null || !result.hit) {
+				continue;
+			}
+			
+			pickingInfos.push(result);
+		}
+		
+		return pickingInfos;
+	}
+	
 	private function _internalPickSprites(ray:Ray, ?predicate:Sprite->Bool, fastCheck:Bool = false, ?camera:Camera):PickingInfo {
 		var pickingInfo:PickingInfo = new PickingInfo();
 		
@@ -2816,23 +2900,23 @@ import com.babylonhx.audio.*;
 		return pickingInfo;
 	}
 
+	/// <summary>Launch a ray to try to pick a mesh in the scene</summary>
+	/// <param name="x">X position on screen</param>
+	/// <param name="y">Y position on screen</param>
+	/// <param name="predicate">Predicate function used to determine eligible meshes. Can be set to null. In this case, a mesh must be enabled, visible and with isPickable set to true</param>
+	/// <param name="fastCheck">Launch a fast check only using the bounding boxes. Can be set to null.</param>
+	/// <param name="camera">camera to use for computing the picking ray. Can be set to null. In this case, the scene.activeCamera will be used</param>
 	inline public function pick(x:Float, y:Float, ?predicate:AbstractMesh->Bool, fastCheck:Bool = false, ?camera:Camera):PickingInfo {
-		/// <summary>Launch a ray to try to pick a mesh in the scene</summary>
-		/// <param name="x">X position on screen</param>
-		/// <param name="y">Y position on screen</param>
-		/// <param name="predicate">Predicate function used to determine eligible meshes. Can be set to null. In this case, a mesh must be enabled, visible and with isPickable set to true</param>
-		/// <param name="fastCheck">Launch a fast check only using the bounding boxes. Can be set to null.</param>
-		/// <param name="camera">camera to use for computing the picking ray. Can be set to null. In this case, the scene.activeCamera will be used</param>
 		return this._internalPick(function(world:Matrix):Ray { return this.createPickingRay(x, y, world, camera); }, predicate, fastCheck);
 	}
 	
+	/// <summary>Launch a ray to try to pick a mesh in the scene</summary>
+	/// <param name="x">X position on screen</param>
+	/// <param name="y">Y position on screen</param>
+	/// <param name="predicate">Predicate function used to determine eligible sprites. Can be set to null. In this case, a sprite must have isPickable set to true</param>
+	/// <param name="fastCheck">Launch a fast check only using the bounding boxes. Can be set to null.</param>
+	/// <param name="camera">camera to use for computing the picking ray. Can be set to null. In this case, the scene.activeCamera will be used</param>
 	inline public function pickSprite(x:Float, y:Float, ?predicate:Sprite->Bool, fastCheck:Bool = false, ?camera:Camera):PickingInfo {
-		/// <summary>Launch a ray to try to pick a mesh in the scene</summary>
-		/// <param name="x">X position on screen</param>
-		/// <param name="y">Y position on screen</param>
-		/// <param name="predicate">Predicate function used to determine eligible sprites. Can be set to null. In this case, a sprite must have isPickable set to true</param>
-		/// <param name="fastCheck">Launch a fast check only using the bounding boxes. Can be set to null.</param>
-		/// <param name="camera">camera to use for computing the picking ray. Can be set to null. In this case, the scene.activeCamera will be used</param>
 		return this._internalPickSprites(this.createPickingRayInCameraSpace(x, y, camera), predicate, fastCheck, camera);
 	}
 
@@ -2845,6 +2929,28 @@ import com.babylonhx.audio.*;
 			
 			return Ray.Transform(ray, this._pickWithRayInverseMatrix);
 		}, cast predicate, fastCheck);
+	}
+	
+	/// <summary>Launch a ray to try to pick a mesh in the scene</summary>
+	/// <param name="x">X position on screen</param>
+	/// <param name="y">Y position on screen</param>
+	/// <param name="predicate">Predicate function used to determine eligible meshes. Can be set to null. In this case, a mesh must be enabled, visible and with isPickable set to true</param>
+	/// <param name="camera">camera to use for computing the picking ray. Can be set to null. In this case, the scene.activeCamera will be used</param>
+	public function multiPick(x:Float, y:Float, ?predicate:AbstractMesh->Bool, ?camera:Camera):Array<PickingInfo> {
+		return this._internalMultiPick(function(world:Matrix):Ray { return this.createPickingRay(x, y, world, camera); }, predicate);
+	}
+
+	/// <summary>Launch a ray to try to pick a mesh in the scene</summary>
+	/// <param name="ray">Ray to use</param>
+	/// <param name="predicate">Predicate function used to determine eligible meshes. Can be set to null. In this case, a mesh must be enabled, visible and with isPickable set to true</param>
+	public function multiPickWithRay(ray:Ray, predicate:AbstractMesh->Bool):Array<PickingInfo> {
+		return this._internalMultiPick(function(world:Matrix):Ray {
+			if (this._pickWithRayInverseMatrix == null) {
+				this._pickWithRayInverseMatrix = Matrix.Identity();
+			}
+			world.invertToRef(this._pickWithRayInverseMatrix);
+			return Ray.Transform(ray, this._pickWithRayInverseMatrix);
+		}, predicate);
 	}
 
 	public function setPointerOverMesh(mesh:AbstractMesh) {
@@ -2960,22 +3066,32 @@ import com.babylonhx.audio.*;
 	}
 	
 	// Misc.
-	public function createDefaultCameraOrLight() {
+	public function createDefaultCameraOrLight(createArcRotateCamera:Bool = false) {
 		// Light
 		if (this.lights.length == 0) {
 			new HemisphericLight("default light", Vector3.Up(), this);
 		}
 		
 		// Camera
-		if (this.activeCamera == null) {
-			var camera = new FreeCamera("default camera", Vector3.Zero(), this);
-			
+		if (this.activeCamera == null) {			
 			// Compute position
 			var worldExtends = this.getWorldExtends();
 			var worldCenter:Vector3 = cast worldExtends.min.add(worldExtends.max.subtract(worldExtends.min).scale(0.5));
 			
-			camera.position = new Vector3(worldCenter.x, worldCenter.y, worldExtends.min.z - (worldExtends.max.z - worldExtends.min.z));
-			camera.setTarget(worldCenter);
+			var camera:Camera = null;
+            
+			if (createArcRotateCamera) {
+                camera = new ArcRotateCamera("default camera", 0, 0, 10, Vector3.Zero(), this);
+				
+                untyped camera.setPosition(new Vector3(worldCenter.x, worldCenter.y, worldExtends.min.z - (worldExtends.max.z - worldExtends.min.z)));
+                untyped camera.setTarget(worldCenter);
+            } 
+			else {
+                camera = new FreeCamera("default camera", Vector3.Zero(), this);
+				
+                camera.position = new Vector3(worldCenter.x, worldCenter.y, worldExtends.min.z - (worldExtends.max.z - worldExtends.min.z));
+                untyped camera.setTarget(worldCenter);
+            }
 			
 			this.activeCamera = camera;
 		}
@@ -3040,11 +3156,11 @@ import com.babylonhx.audio.*;
 	/**
 	 * Specifies whether or not the stencil and depth buffer are cleared between two rendering groups.
 	 * 
-	 * @param renderingGroupId The rendering group id corresponding to its index
-	 * @param autoClearDepthStencil Automatically clears depth and stencil between groups if true.
+	 * @param depth Automatically clears depth between groups if true and autoClear is true.
+	 * @param stencil Automatically clears stencil between groups if true and autoClear is true.
 	 */
-	inline public function setRenderingAutoClearDepthStencil(renderingGroupId:Int, autoClearDepthStencil:Bool) {            
-		this._renderingManager.setRenderingAutoClearDepthStencil(renderingGroupId, autoClearDepthStencil);
+	inline public function setRenderingAutoClearDepthStencil(renderingGroupId:Int, autoClearDepthStencil:Bool, depth:Bool, stencil:Bool) {            
+		this._renderingManager.setRenderingAutoClearDepthStencil(renderingGroupId, autoClearDepthStencil, depth, stencil);
 	}
 	
 }

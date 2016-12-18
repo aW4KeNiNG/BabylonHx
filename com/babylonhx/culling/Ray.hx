@@ -1,9 +1,15 @@
 package com.babylonhx.culling;
 
+import com.babylonhx.math.Color3;
 import com.babylonhx.math.Vector3;
 import com.babylonhx.math.Matrix;
 import com.babylonhx.math.Plane;
+import com.babylonhx.math.Tmp;
+import com.babylonhx.mesh.Mesh;
+import com.babylonhx.mesh.LinesMesh;
+import com.babylonhx.mesh.AbstractMesh;
 import com.babylonhx.collisions.IntersectionInfo;
+import com.babylonhx.collisions.PickingInfo;
 
 /**
 * ...
@@ -21,6 +27,12 @@ import com.babylonhx.collisions.IntersectionInfo;
 	private var _tvec:Vector3;
 	private var _qvec:Vector3;
 	
+	private var _renderPoints:Array<Vector3>;
+    private var _renderLine:LinesMesh;
+	private var _scene:Scene;
+	private var _show:Bool = false;
+	private var _tmpRay:Ray;
+	
 
 	inline public function new(origin:Vector3, direction:Vector3, ?length:Float) {
 		this.origin = origin;
@@ -32,23 +44,25 @@ import com.babylonhx.collisions.IntersectionInfo;
 	public function intersectsBoxMinMax(minimum:Vector3, maximum:Vector3):Bool {
 		var d:Float = 0.0;
 		var maxValue:Float = Math.POSITIVE_INFINITY;
-		
+		var inv:Float = 0;
+		var min:Float = 0;
+		var max:Float = 0;
+		var temp:Float = 0;
 		if (Math.abs(this.direction.x) < 0.0000001) {
 			if (this.origin.x < minimum.x || this.origin.x > maximum.x) {
 				return false;
 			}
 		}
 		else {
-			var inv = 1.0 / this.direction.x;
-			var min = (minimum.x - this.origin.x) * inv;
-			var max = (maximum.x - this.origin.x) * inv;
-			
-			if(max == Math.NEGATIVE_INFINITY) {
-				max = Math.POSITIVE_INFINITY; 
+			inv = 1.0 / this.direction.x;
+			min = (minimum.x - this.origin.x) * inv;
+			max = (maximum.x - this.origin.x) * inv;
+			if (max == Math.NEGATIVE_INFINITY) {
+				max = Math.POSITIVE_INFINITY;
 			}
 			
 			if (min > max) {
-				var temp = min;
+				temp = min;
 				min = max;
 				max = temp;
 			}
@@ -67,16 +81,16 @@ import com.babylonhx.collisions.IntersectionInfo;
 			}
 		}
 		else {
-			var inv = 1.0 / this.direction.y;
-			var min = (minimum.y - this.origin.y) * inv;
-			var max = (maximum.y - this.origin.y) * inv;
+			inv = 1.0 / this.direction.y;
+			min = (minimum.y - this.origin.y) * inv;
+			max = (maximum.y - this.origin.y) * inv;
 			
-			if(max == Math.NEGATIVE_INFINITY) {
-				max = Math.POSITIVE_INFINITY; 
+			if (max == Math.NEGATIVE_INFINITY) {
+				max = Math.POSITIVE_INFINITY;
 			}
 			
 			if (min > max) {
-				var temp = min;
+				temp = min;
 				min = max;
 				max = temp;
 			}
@@ -95,16 +109,16 @@ import com.babylonhx.collisions.IntersectionInfo;
 			}
 		}
 		else {
-			var inv = 1.0 / this.direction.z;
-			var min = (minimum.z - this.origin.z) * inv;
-			var max = (maximum.z - this.origin.z) * inv;
+			inv = 1.0 / this.direction.z;
+			min = (minimum.z - this.origin.z) * inv;
+			max = (maximum.z - this.origin.z) * inv;
 			
-			if(max == Math.NEGATIVE_INFINITY) {
-				max = Math.POSITIVE_INFINITY; 
+			if (max == Math.NEGATIVE_INFINITY) {
+				max = Math.POSITIVE_INFINITY;
 			}
 			
 			if (min > max) {
-				var temp = min;
+				temp = min;
 				min = max;
 				max = temp;
 			}
@@ -116,6 +130,7 @@ import com.babylonhx.collisions.IntersectionInfo;
 				return false;
 			}
 		}
+		
 		return true;
 	}
 
@@ -180,6 +195,12 @@ import com.babylonhx.collisions.IntersectionInfo;
 			return null;
 		}
 		
+		//check if the distance is longer than the predefined length.
+		var distance = Vector3.Dot(this._edge2, this._qvec) * invdet;
+		if (distance > this.length) {
+			return null;
+		}
+		
 		return new IntersectionInfo(bu, bv, Vector3.Dot(this._edge2, this._qvec) * invdet);
 	}
 	
@@ -203,6 +224,59 @@ import com.babylonhx.collisions.IntersectionInfo;
 			
 			return distance;
 		}
+	}
+	
+	public function intersectsMesh(mesh:AbstractMesh, fastCheck:Bool = false):PickingInfo {
+		var tm = Tmp.matrix[0];
+		
+		mesh.getWorldMatrix().invertToRef(tm);
+		
+		if (this._tmpRay != null) {
+            Ray.TransformToRef(this, tm, this._tmpRay);
+        }
+		else {
+            this._tmpRay = Ray.Transform(this, tm);
+        }
+		
+		return mesh.intersects(this._tmpRay, fastCheck);
+	}
+
+	public function show(scene:Scene, ?color:Color3) {
+		if (!this._show) {
+            this._show = true;
+            this._scene = scene;
+            this._renderPoints = [this.origin, this.origin.add(this.direction.scale(this.length))];
+            this._renderLine = Mesh.CreateLines("ray", this._renderPoints, scene, true);
+			
+            this._scene.registerBeforeRender(this._render);
+        }
+		
+		if (color != null) {
+			this._renderLine.color.copyFrom(color);
+		}
+	}
+
+	public function hide() {
+		if (this._show){
+			this._show = false;
+			this._scene.unregisterBeforeRender(this._render);
+		}
+		
+		if (this._renderLine != null) {
+			this._renderLine.dispose();
+			this._renderLine = null;
+			this._renderPoints = null;
+		}
+	}
+
+	private function _render(_, _) {
+		var point = this._renderPoints[1];
+		
+		point.copyFrom(this.direction);
+		point.scaleInPlace(this.length);
+		point.addInPlace(this.origin);
+		
+		Mesh.CreateLines("ray", this._renderPoints, this._scene, true, this._renderLine);
 	}
 	
 	private static var smallnum:Float = 0.00000001;
@@ -336,5 +410,12 @@ import com.babylonhx.collisions.IntersectionInfo;
 		
 		return new Ray(newOrigin, newDirection, ray.length);
 	}
+	
+	public static function TransformToRef(ray:Ray, matrix:Matrix, result:Ray) {        
+        Vector3.TransformCoordinatesToRef(ray.origin, matrix, result.origin);
+        Vector3.TransformNormalToRef(ray.direction, matrix, result.direction);
+		 
+        ray.direction.normalize();        
+    }
 	
 }
